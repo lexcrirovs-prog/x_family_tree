@@ -1,0 +1,72 @@
+@import "tailwindcss";
+@import "@xyflow/react/dist/style.css";
+
+@theme {
+  --color-bg: #0f0f12;
+  --color-bg-2: #16161c;
+  --color-panel: #1c1c24;
+  --color-border: #2a2a36;
+  --color-text: #e8e8ee;
+  --color-muted: #9a9aa8;
+  --color-accent: #7c9cff;
+  --color-accent-2: #ff9ec7;
+}
+
+html, body, #root {
+  height: 100%;
+  margin: 0;
+}
+body {
+  background: var(--color-bg);
+  color: var(--color-text);
+  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+:root[data-theme="light"] {
+  --color-bg: #f7f7fa;
+  --color-bg-2: #ffffff;
+  --color-panel: #ffffff;
+  --color-border: #e5e5ee;
+  --color-text: #1a1a22;
+  --color-muted: #6a6a78;
+  --color-accent: #4a6cf7;
+  --color-accent-2: #ff5ea0;
+}
+
+.react-flow__node {
+  background: transparent !important;
+  border: none !important;
+  padding: 0 !important;
+}
+.react-flow__edge-path {
+  stroke: var(--color-border);
+  stroke-width: 1.5;
+}
+.react-flow__edge.highlight .react-flow__edge-path {
+  stroke: var(--color-accent);
+  stroke-width: 2.5;
+}
+
+.glow {
+  box-shadow:
+    0 0 0 1px rgba(255, 255, 255, 0.04),
+    0 8px 24px -8px rgba(0, 0, 0, 0.45),
+    0 0 32px -12px rgba(124, 156, 255, 0.35);
+}
+
+.scrollbar::-webkit-scrollbar { width: 8px; height: 8px; }
+.scrollbar::-webkit-scrollbar-thumb { background: var(--color-border); border-radius: 8px; }
+.scrollbar::-webkit-scrollbar-track { background: transparent; }
+
+button { cursor: pointer; }
+input, textarea, select {
+  background: var(--color-bg-2);
+  border: 1px solid var(--color-border);
+  color: var(--color-text);
+  border-radius: 8px;
+  padding: 6px 10px;
+  outline: none;
+}
+input:focus, textarea:focus, select:focus {
+  border-color: var(--color-accent);
+}
