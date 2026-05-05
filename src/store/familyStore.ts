@@ -5,6 +5,7 @@ import type {
   ChangeLogEntry,
   Couple,
   FamilySnapshot,
+  GraphNodePositions,
   ImportantPerson,
   LifeEvent,
   MediaItem,
@@ -15,20 +16,29 @@ import type {
 import { createId } from '../utils/ids';
 
 type FamilyStore = FamilySnapshot & {
+  title: string;
   mode: ViewMode;
   theme: ThemeMode;
   selectedPersonId: string;
   selectedImportantPersonId?: string;
   focusedPersonId?: string;
   showImportantPeople: boolean;
+  showMilestones: boolean;
+  graphNodePositions: GraphNodePositions;
+  fanOffsetY: number;
   recentPersonIds: string[];
   changeLog: ChangeLogEntry[];
+  updateTitle: (title: string) => void;
   setMode: (mode: ViewMode) => void;
   toggleTheme: () => void;
   selectPerson: (id: string) => void;
   selectImportantPerson: (id?: string) => void;
   setFocusedPerson: (id?: string) => void;
   toggleImportantPeople: () => void;
+  toggleMilestones: () => void;
+  setGraphNodeX: (id: string, x: number) => void;
+  resetGraphLayout: () => void;
+  shiftFan: (delta: number) => void;
   updatePerson: (id: string, patch: Partial<Person>) => void;
   updateImportantPerson: (id: string, patch: Partial<ImportantPerson>) => void;
   addParents: (childId: string) => void;
@@ -57,14 +67,19 @@ export const useFamilyStore = create<FamilyStore>()(
   persist(
     (set, get) => ({
       ...seedSnapshot,
+      title: seedSnapshot.title ?? 'Генеалогическое древо семьи',
       mode: 'graph',
       theme: 'dark',
       selectedPersonId: 'me',
       selectedImportantPersonId: undefined,
       focusedPersonId: undefined,
       showImportantPeople: true,
+      showMilestones: true,
+      graphNodePositions: {},
+      fanOffsetY: 0,
       recentPersonIds: ['me'],
       changeLog: [],
+      updateTitle: (title) => set((state) => ({ title, ...withLog(state, `Название древа изменено: ${title}`) })),
       setMode: (mode) => set({ mode }),
       toggleTheme: () => set((state) => ({ theme: state.theme === 'dark' ? 'light' : 'dark' })),
       selectPerson: (id) =>
@@ -76,6 +91,13 @@ export const useFamilyStore = create<FamilyStore>()(
       selectImportantPerson: (id) => set({ selectedImportantPersonId: id, focusedPersonId: undefined }),
       setFocusedPerson: (id) => set({ focusedPersonId: id }),
       toggleImportantPeople: () => set((state) => ({ showImportantPeople: !state.showImportantPeople })),
+      toggleMilestones: () => set((state) => ({ showMilestones: !state.showMilestones })),
+      setGraphNodeX: (id, x) =>
+        set((state) => ({
+          graphNodePositions: { ...state.graphNodePositions, [id]: Math.round(x) },
+        })),
+      resetGraphLayout: () => set((state) => ({ graphNodePositions: {}, ...withLog(state, 'Раскладка графа сброшена') })),
+      shiftFan: (delta) => set((state) => ({ fanOffsetY: Math.max(-220, Math.min(220, state.fanOffsetY + delta)) })),
       updatePerson: (id, patch) =>
         set((state) => ({
           people: { ...state.people, [id]: { ...state.people[id], ...patch } },
@@ -276,13 +298,24 @@ export const useFamilyStore = create<FamilyStore>()(
       importSnapshot: (snapshot) =>
         set((state) => ({
           ...snapshot,
+          title: snapshot.title ?? state.title,
           selectedPersonId: Object.keys(snapshot.people)[0] ?? 'me',
           ...withLog(state, 'Импортирован JSON-бэкап'),
         })),
-      resetSeed: () => set((state) => ({ ...seedSnapshot, ...withLog(state, 'Данные сброшены к примеру') })),
+      resetSeed: () =>
+        set((state) => ({
+          ...seedSnapshot,
+          title: seedSnapshot.title ?? state.title,
+          showImportantPeople: true,
+          showMilestones: true,
+          graphNodePositions: {},
+          fanOffsetY: 0,
+          ...withLog(state, 'Данные сброшены к примеру'),
+        })),
       snapshot: () => {
         const state = get();
         return {
+          title: state.title,
           people: state.people,
           couples: state.couples,
           importantPeople: state.importantPeople,
@@ -295,6 +328,7 @@ export const useFamilyStore = create<FamilyStore>()(
       name: 'x-family-tree-metadata',
       storage: createJSONStorage(() => localStorage),
       partialize: (state) => ({
+        title: state.title,
         people: state.people,
         couples: state.couples,
         importantPeople: state.importantPeople,
@@ -304,10 +338,12 @@ export const useFamilyStore = create<FamilyStore>()(
         theme: state.theme,
         selectedPersonId: state.selectedPersonId,
         showImportantPeople: state.showImportantPeople,
+        showMilestones: state.showMilestones,
+        graphNodePositions: state.graphNodePositions,
+        fanOffsetY: state.fanOffsetY,
         recentPersonIds: state.recentPersonIds,
         changeLog: state.changeLog,
       }),
     },
   ),
 );
-

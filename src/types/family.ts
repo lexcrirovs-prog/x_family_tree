@@ -3,6 +3,7 @@ export type OwnerType = 'person' | 'couple';
 export type EntityLinkType = 'person' | 'couple' | 'importantPerson' | 'event';
 export type ViewMode = 'graph' | 'timeline' | 'fan';
 export type ThemeMode = 'dark' | 'light';
+export type GraphNodePositions = Record<string, number>;
 
 export type Person = {
   id: string;
@@ -109,11 +110,20 @@ export type ChangeLogEntry = {
   label: string;
 };
 
+export type HistoricalMilestone = {
+  id: string;
+  title: string;
+  startYear: number;
+  endYear?: number;
+  description?: string;
+  tone: 'war' | 'state' | 'culture' | 'family';
+};
+
 export type FamilySnapshot = {
+  title?: string;
   people: Record<string, Person>;
   couples: Record<string, Couple>;
   importantPeople: Record<string, ImportantPerson>;
   events: Record<string, LifeEvent>;
   media: Record<string, MediaItem>;
 };
-

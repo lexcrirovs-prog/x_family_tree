@@ -2,6 +2,7 @@ import { useMemo } from 'react';
 import * as d3 from 'd3';
 import { AnimatePresence, motion } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
+import { ArrowDown, ArrowUp, RotateCcw } from 'lucide-react';
 import { useFamilyStore } from '../../store/familyStore';
 import type { Person } from '../../types/family';
 import { getInitials, getYears } from '../../utils/family';
@@ -58,6 +59,8 @@ export function FanView() {
   const couples = useFamilyStore((state) => state.couples);
   const selectedPersonId = useFamilyStore((state) => state.selectedPersonId);
   const selectPerson = useFamilyStore((state) => state.selectPerson);
+  const fanOffsetY = useFamilyStore((state) => state.fanOffsetY);
+  const shiftFan = useFamilyStore((state) => state.shiftFan);
   const navigate = useNavigate();
 
   const slots = useMemo(() => buildAncestorSlots(people, couples, selectedPersonId), [couples, people, selectedPersonId]);
@@ -94,12 +97,21 @@ export function FanView() {
       <motion.div
         key="fan"
         className="tree-surface fan-surface"
+        data-tree-export-root="true"
         initial={{ opacity: 0, y: 12 }}
         animate={{ opacity: 1, y: 0 }}
         exit={{ opacity: 0, y: -12 }}
       >
         <div className="fan-layout">
-          <svg viewBox="-420 -80 840 600" role="img" aria-label="Веер предков">
+          <svg
+            viewBox="-420 -120 840 680"
+            role="img"
+            aria-label="Веер предков"
+            onWheel={(event) => {
+              event.preventDefault();
+              shiftFan(event.deltaY > 0 ? -18 : 18);
+            }}
+          >
             <defs>
               <filter id="soft-glow">
                 <feGaussianBlur stdDeviation="3" result="coloredBlur" />
@@ -109,57 +121,72 @@ export function FanView() {
                 </feMerge>
               </filter>
             </defs>
-            <g className="fan-root" onClick={() => navigate(`/person/${root.id}`)}>
-              <circle r="58" cx="0" cy="92" />
-              <text x="0" y="88" textAnchor="middle" className="fan-root-initials">
-                {getInitials(root)}
-              </text>
-              <text x="0" y="112" textAnchor="middle">
-                {root.firstName}
-              </text>
+            <g transform={`translate(0 ${fanOffsetY})`}>
+              <g className="fan-root" onClick={() => navigate(`/person/${root.id}`)}>
+                <circle r="58" cx="0" cy="92" />
+                <text x="0" y="88" textAnchor="middle" className="fan-root-initials">
+                  {getInitials(root)}
+                </text>
+                <text x="0" y="112" textAnchor="middle">
+                  {root.firstName}
+                </text>
+              </g>
+              {slots
+                .filter((slot) => slot.depth > 0)
+                .map((slot) => {
+                  const position = textPosition(slot);
+                  return (
+                    <g
+                      key={`${slot.depth}-${slot.index}-${slot.person?.id ?? 'empty'}`}
+                      className={`fan-sector fan-${slot.branch}`}
+                      onClick={() => {
+                        if (slot.person) selectPerson(slot.person.id);
+                      }}
+                      onDoubleClick={() => {
+                        if (slot.person) navigate(`/person/${slot.person.id}`);
+                      }}
+                    >
+                      <path d={sectorPath(slot)} transform="translate(0,92)" />
+                      {slot.person ? (
+                        <>
+                          <text x={position.x} y={position.y - 7} textAnchor="middle" className="fan-name">
+                            {slot.person.firstName}
+                          </text>
+                          <text x={position.x} y={position.y + 12} textAnchor="middle" className="fan-years">
+                            {getYears(slot.person)}
+                          </text>
+                        </>
+                      ) : (
+                        <text x={position.x} y={position.y} textAnchor="middle" className="fan-empty">
+                          Добавить
+                        </text>
+                      )}
+                    </g>
+                  );
+                })}
             </g>
-            {slots
-              .filter((slot) => slot.depth > 0)
-              .map((slot) => {
-                const position = textPosition(slot);
-                return (
-                  <g
-                    key={`${slot.depth}-${slot.index}-${slot.person?.id ?? 'empty'}`}
-                    className={`fan-sector fan-${slot.branch}`}
-                    onClick={() => {
-                      if (slot.person) selectPerson(slot.person.id);
-                    }}
-                    onDoubleClick={() => {
-                      if (slot.person) navigate(`/person/${slot.person.id}`);
-                    }}
-                  >
-                    <path d={sectorPath(slot)} transform="translate(0,92)" />
-                    {slot.person ? (
-                      <>
-                        <text x={position.x} y={position.y - 7} textAnchor="middle" className="fan-name">
-                          {slot.person.firstName}
-                        </text>
-                        <text x={position.x} y={position.y + 12} textAnchor="middle" className="fan-years">
-                          {getYears(slot.person)}
-                        </text>
-                      </>
-                    ) : (
-                      <text x={position.x} y={position.y} textAnchor="middle" className="fan-empty">
-                        Добавить
-                      </text>
-                    )}
-                  </g>
-                );
-              })}
           </svg>
           <aside className="fan-notes">
             <strong>Веер</strong>
             <span>Центр - выбранный профиль. Полукольца показывают предков до четырёх поколений.</span>
             <p>Двойной клик по сектору открывает глубокий профиль, одиночный клик выбирает человека для редактора.</p>
+            <div className="fan-controls">
+              <button type="button" onClick={() => shiftFan(24)} title="Поднять веер выше">
+                <ArrowUp size={15} />
+                Вверх
+              </button>
+              <button type="button" onClick={() => shiftFan(-24)} title="Опустить веер ниже">
+                <ArrowDown size={15} />
+                Вниз
+              </button>
+              <button type="button" onClick={() => shiftFan(-fanOffsetY)} title="Вернуть в центр">
+                <RotateCcw size={15} />
+                Центр
+              </button>
+            </div>
           </aside>
         </div>
       </motion.div>
     </AnimatePresence>
   );
 }
-

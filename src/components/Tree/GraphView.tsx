@@ -7,6 +7,7 @@ import ReactFlow, {
   MiniMap,
   type Edge,
   type Node,
+  type NodeDragHandler,
   type NodeMouseHandler,
 } from 'reactflow';
 import { AnimatePresence, motion } from 'framer-motion';
@@ -14,10 +15,12 @@ import { useFamilyStore } from '../../store/familyStore';
 import { activePeople, getFullName } from '../../utils/family';
 import { PersonNode, type PersonNodeData } from './PersonNode';
 import { ImportantNode, type ImportantNodeData } from './ImportantNode';
+import { AddRelationNode, type AddRelationNodeData } from './AddRelationNode';
 
 const nodeTypes = {
   person: PersonNode,
   important: ImportantNode,
+  addRelation: AddRelationNode,
 };
 
 export function GraphView() {
@@ -26,6 +29,10 @@ export function GraphView() {
   const focusedPersonId = useFamilyStore((state) => state.focusedPersonId);
   const setFocusedPerson = useFamilyStore((state) => state.setFocusedPerson);
   const selectPerson = useFamilyStore((state) => state.selectPerson);
+  const selectedPersonId = useFamilyStore((state) => state.selectedPersonId);
+  const graphNodePositions = useFamilyStore((state) => state.graphNodePositions);
+  const setGraphNodeX = useFamilyStore((state) => state.setGraphNodeX);
+  const resetGraphLayout = useFamilyStore((state) => state.resetGraphLayout);
   const navigate = useNavigate();
   const [hoveredNode, setHoveredNode] = useState<string | undefined>();
 
@@ -51,8 +58,9 @@ export function GraphView() {
     const top = 80;
     const people = activePeople(snapshot);
     const generations = [...new Set(people.map((person) => person.generation))].sort((a, b) => a - b);
-    const nodes: Node<PersonNodeData | ImportantNodeData>[] = [];
+    const nodes: Node<PersonNodeData | ImportantNodeData | AddRelationNodeData>[] = [];
     const edges: Edge[] = [];
+    const nodePositions = new Map<string, { x: number; y: number }>();
 
     generations.forEach((generation, generationIndex) => {
       const inGeneration = people
@@ -64,6 +72,10 @@ export function GraphView() {
       const startX = 120 - ((inGeneration.length - 1) * xGap) / 2;
       inGeneration.forEach((person, index) => {
         const muted = hoveredNode ? !relatedIds.has(person.id) : false;
+        const defaultX = startX + index * xGap + 720;
+        const y = top + generationIndex * generationGap;
+        const x = graphNodePositions[person.id] ?? defaultX;
+        nodePositions.set(person.id, { x, y });
         nodes.push({
           id: person.id,
           type: 'person',
@@ -73,9 +85,10 @@ export function GraphView() {
             muted,
           },
           position: {
-            x: startX + index * xGap + 720,
-            y: top + generationIndex * generationGap,
+            x,
+            y,
           },
+          draggable: true,
         });
       });
     });
@@ -134,21 +147,86 @@ export function GraphView() {
       });
     }
 
+    people.forEach((person) => {
+      const position = nodePositions.get(person.id);
+      if (!position) return;
+      if (!person.parentCoupleId && person.generation > -4) {
+        const nodeId = `add-parents-${person.id}`;
+        nodes.push({
+          id: nodeId,
+          type: 'addRelation',
+          data: {
+            targetId: person.id,
+            action: 'parents',
+            label: 'Добавить родителей',
+          },
+          position: { x: position.x + 12, y: position.y - 104 },
+          draggable: false,
+          selectable: false,
+        });
+        edges.push({
+          id: `placeholder-parent-${person.id}`,
+          source: nodeId,
+          target: person.id,
+          type: 'smoothstep',
+          className: 'edge-placeholder',
+          style: { strokeDasharray: '5 5', strokeWidth: 1.2 },
+        });
+      }
+
+      const hasSpouse = Object.values(snapshot.couples).some(
+        (couple) => couple.partnerAId === person.id || couple.partnerBId === person.id,
+      );
+      if (person.generation >= 0 && !hasSpouse) {
+        const nodeId = `add-spouse-${person.id}`;
+        nodes.push({
+          id: nodeId,
+          type: 'addRelation',
+          data: {
+            targetId: person.id,
+            action: 'spouse',
+            label: 'Добавить супруга/у',
+          },
+          position: { x: position.x + xGap * 0.82, y: position.y + 8 },
+          draggable: false,
+          selectable: false,
+        });
+        edges.push({
+          id: `placeholder-spouse-${person.id}`,
+          source: person.id,
+          target: nodeId,
+          type: 'smoothstep',
+          className: 'edge-placeholder',
+          style: { strokeDasharray: '5 5', strokeWidth: 1.2 },
+        });
+      }
+    });
+
     return { nodes, edges };
-  }, [focusedPersonId, hoveredNode, relatedIds, showImportantPeople, snapshot]);
+  }, [focusedPersonId, graphNodePositions, hoveredNode, relatedIds, showImportantPeople, snapshot]);
 
   const handleEnter: NodeMouseHandler = (_, node) => setHoveredNode(node.id);
   const handleLeave: NodeMouseHandler = () => setHoveredNode(undefined);
+  const handleDrag: NodeDragHandler = (_, node) => {
+    if (snapshot.people[node.id]) setGraphNodeX(node.id, node.position.x);
+  };
 
   return (
     <AnimatePresence mode="wait">
       <motion.div
         key="graph"
         className="tree-surface graph-surface"
+        data-tree-export-root="true"
         initial={{ opacity: 0, y: 12 }}
         animate={{ opacity: 1, y: 0 }}
         exit={{ opacity: 0, y: -12 }}
       >
+        <div className="graph-toolbar">
+          <span>Перетаскивайте узлы по горизонтали: поколение остаётся зафиксировано.</span>
+          <button type="button" onClick={resetGraphLayout}>
+            Сбросить раскладку
+          </button>
+        </div>
         <ReactFlow
           nodes={nodes}
           edges={edges}
@@ -156,6 +234,8 @@ export function GraphView() {
           onNodeClick={(_, node) => {
             if (snapshot.people[node.id]) selectPerson(node.id);
           }}
+          onNodeDrag={handleDrag}
+          onNodeDragStop={handleDrag}
           onNodeDoubleClick={(_, node) => {
             if (snapshot.people[node.id]) navigate(`/person/${node.id}`);
           }}
@@ -176,4 +256,3 @@ export function GraphView() {
     </AnimatePresence>
   );
 }
-

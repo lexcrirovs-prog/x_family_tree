@@ -312,10 +312,10 @@ const events: Record<string, LifeEvent> = {
 const media: Record<string, MediaItem> = {};
 
 export const seedSnapshot: FamilySnapshot = {
+  title: 'Генеалогическое древо семьи',
   people,
   couples,
   importantPeople,
   events,
   media,
 };
-

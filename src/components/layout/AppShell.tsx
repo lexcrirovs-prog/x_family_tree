@@ -1,6 +1,6 @@
 import { ChangeEvent } from 'react';
 import { Outlet } from 'react-router-dom';
-import { Download, Eye, EyeOff, Moon, RotateCcw, Sun, Upload } from 'lucide-react';
+import { Download, Eye, EyeOff, Flag, Moon, RotateCcw, Sun, Upload } from 'lucide-react';
 import { useFamilyStore } from '../../store/familyStore';
 import type { FamilySnapshot } from '../../types/family';
 import { downloadJson, readJsonFile } from '../../utils/download';
@@ -13,10 +13,14 @@ import { useKeyboardMode } from '../../hooks/useKeyboardMode';
 export function AppShell() {
   const mode = useFamilyStore((state) => state.mode);
   const setMode = useFamilyStore((state) => state.setMode);
+  const title = useFamilyStore((state) => state.title);
+  const updateTitle = useFamilyStore((state) => state.updateTitle);
   const theme = useFamilyStore((state) => state.theme);
   const toggleTheme = useFamilyStore((state) => state.toggleTheme);
   const showImportantPeople = useFamilyStore((state) => state.showImportantPeople);
   const toggleImportantPeople = useFamilyStore((state) => state.toggleImportantPeople);
+  const showMilestones = useFamilyStore((state) => state.showMilestones);
+  const toggleMilestones = useFamilyStore((state) => state.toggleMilestones);
   const resetSeed = useFamilyStore((state) => state.resetSeed);
   const importSnapshot = useFamilyStore((state) => state.importSnapshot);
   const snapshot = useFamilyStore((state) => state.snapshot());
@@ -38,16 +42,34 @@ export function AppShell() {
         <div className="brand">
           <span className="brand-mark">XT</span>
           <div>
-            <strong>Генеалогическое древо</strong>
+            <input
+              className="tree-title-input"
+              value={title}
+              onChange={(event) => updateTitle(event.target.value)}
+              aria-label="Название древа"
+            />
             <span>локальный семейный архив</span>
           </div>
         </div>
         <GlobalSearch />
         <ModeSwitcher value={mode} onChange={setMode} />
         <div className="toolbar-actions">
-          <button type="button" className="toolbar-button" onClick={toggleImportantPeople}>
+          <button
+            type="button"
+            className={showImportantPeople ? 'toolbar-button toolbar-button-active' : 'toolbar-button'}
+            onClick={toggleImportantPeople}
+          >
             {showImportantPeople ? <Eye size={16} /> : <EyeOff size={16} />}
             <span>Важные</span>
+          </button>
+          <button
+            type="button"
+            className={showMilestones ? 'toolbar-button toolbar-button-active' : 'toolbar-button'}
+            onClick={toggleMilestones}
+            title="Показать или скрыть исторические вехи на таймлайне"
+          >
+            <Flag size={16} />
+            <span>Вехи</span>
           </button>
           <button type="button" className="toolbar-button" onClick={toggleTheme} title="Тема">
             {theme === 'dark' ? <Moon size={16} /> : <Sun size={16} />}
@@ -71,4 +93,3 @@ export function AppShell() {
     </div>
   );
 }
-
