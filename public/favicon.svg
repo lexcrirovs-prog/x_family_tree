@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Family tree">
+  <rect width="64" height="64" rx="12" fill="#1a1a1a"/>
+  <circle cx="32" cy="17" r="7" fill="#ffba66"/>
+  <circle cx="18" cy="43" r="7" fill="#57d0c4"/>
+  <circle cx="46" cy="43" r="7" fill="#77b7ff"/>
+  <path d="M32 24v8M32 32H18v4M32 32h14v4" fill="none" stroke="#f4f7fb" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>
