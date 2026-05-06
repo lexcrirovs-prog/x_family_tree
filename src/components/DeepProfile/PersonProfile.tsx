@@ -7,6 +7,8 @@ import { LifeTimeline } from './LifeTimeline';
 import { RelationsBlock } from './RelationsBlock';
 import { MediaUploader } from '../Media/MediaUploader';
 import { PhotoTagger } from '../Media/PhotoTagger';
+import { AudioUploader } from '../Media/AudioUploader';
+import { AudioStories } from '../Media/AudioStories';
 
 export function PersonProfile() {
   const { id } = useParams();
@@ -84,7 +86,7 @@ export function PersonProfile() {
           <div className="section-header">
             <div>
               <h2>Галерея фото</h2>
-              <p>Фото и видео хранятся в IndexedDB, а в metadata остаются только mediaId.</p>
+              <p>Фото и видео хранятся в Supabase Storage, метаданные — в Postgres.</p>
             </div>
             <MediaUploader ownerId={person.id} />
           </div>
@@ -95,6 +97,15 @@ export function PersonProfile() {
               photoItems.map((media) => <PhotoTagger key={media.id} media={media} />)
             )}
           </div>
+
+          <div className="section-header">
+            <div>
+              <h2>Аудио-истории</h2>
+              <p>Голосовые рассказы, интервью, песни — добавляйте записи из жизни.</p>
+            </div>
+            <AudioUploader ownerId={person.id} />
+          </div>
+          <AudioStories ownerId={person.id} />
         </section>
         <RelationsBlock snapshot={snapshot} person={person} />
       </div>

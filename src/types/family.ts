@@ -15,6 +15,7 @@ export type Person = {
   bio?: string;
   photoIds: string[];
   videoIds: string[];
+  audioIds: string[];
   parentCoupleId?: string;
   lifeEventIds: string[];
   isDeleted?: boolean;
@@ -63,13 +64,15 @@ export type PhotoTag = {
 
 export type MediaItem = {
   id: string;
-  type: 'photo' | 'video';
+  type: 'photo' | 'video' | 'audio';
   caption?: string;
   date?: string;
   yearTaken?: number;
   tags: PhotoTag[];
   linkedEventId?: string;
   ownerId?: string;
+  storagePath?: string;
+  durationSec?: number;
 };
 
 export type LifeEventType =

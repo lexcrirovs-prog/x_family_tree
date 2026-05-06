@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Tag } from 'lucide-react';
-import { indexedDBMediaAdapter } from '../../storage/IndexedDBAdapter';
+import { getMediaUrl } from '../../storage/SupabaseAdapter';
 import { useFamilyStore } from '../../store/familyStore';
 import type { MediaItem, PhotoTag } from '../../types/family';
 import { getFullName } from '../../utils/family';
@@ -14,27 +14,29 @@ type PhotoTaggerProps = {
 export function PhotoTagger({ media }: PhotoTaggerProps) {
   const people = useFamilyStore((state) => state.people);
   const updateMediaItem = useFamilyStore((state) => state.updateMediaItem);
+  const userRole = useFamilyStore((state) => state.userRole);
   const [url, setUrl] = useState<string | undefined>();
   const [tagMode, setTagMode] = useState(false);
   const [draft, setDraft] = useState<PhotoTag | undefined>();
+  const canEdit = userRole === 'owner' || userRole === 'editor';
 
   useEffect(() => {
-    let revoke: string | undefined;
-    indexedDBMediaAdapter.getBlob(media.id).then((stored) => {
-      if (!stored) return;
-      revoke = URL.createObjectURL(stored.blob);
-      setUrl(revoke);
-    });
+    let cancelled = false;
+    if (media.storagePath) {
+      getMediaUrl(media.storagePath).then((signed) => {
+        if (!cancelled) setUrl(signed);
+      });
+    }
     return () => {
-      if (revoke) URL.revokeObjectURL(revoke);
+      cancelled = true;
     };
-  }, [media.id]);
+  }, [media.storagePath]);
 
   if (!url) {
     return (
       <div className="photo-placeholder">
         <Tag size={18} />
-        <span>{media.caption || 'Фото сохранено в IndexedDB'}</span>
+        <span>{media.caption || 'Фото загружается…'}</span>
       </div>
     );
   }
@@ -43,14 +45,16 @@ export function PhotoTagger({ media }: PhotoTaggerProps) {
     <div className="photo-tagger">
       <div className="photo-tagger-toolbar">
         <strong>{media.caption || 'Фото'}</strong>
-        <button type="button" onClick={() => setTagMode((value) => !value)}>
-          {tagMode ? 'Просмотр' : 'Режим тегирования'}
-        </button>
+        {canEdit && (
+          <button type="button" onClick={() => setTagMode((value) => !value)}>
+            {tagMode ? 'Просмотр' : 'Режим тегирования'}
+          </button>
+        )}
       </div>
       <div
-        className={tagMode ? 'photo-canvas tagging' : 'photo-canvas'}
+        className={tagMode && canEdit ? 'photo-canvas tagging' : 'photo-canvas'}
         onClick={(event) => {
-          if (!tagMode) return;
+          if (!tagMode || !canEdit) return;
           const rect = event.currentTarget.getBoundingClientRect();
           const x = ((event.clientX - rect.left) / rect.width) * 100;
           const y = ((event.clientY - rect.top) / rect.height) * 100;
@@ -86,13 +90,17 @@ export function PhotoTagger({ media }: PhotoTaggerProps) {
           })}
         </div>
       </div>
-      {draft && (
+      {draft && canEdit && (
         <div className="tag-editor">
           <select
             value={draft.linkedPersonId ?? ''}
             onChange={(event) => {
               const linkedPersonId = event.target.value || undefined;
-              setDraft({ ...draft, linkedPersonId, customName: linkedPersonId ? undefined : draft.customName });
+              setDraft({
+                ...draft,
+                linkedPersonId,
+                customName: linkedPersonId ? undefined : draft.customName,
+              });
             }}
           >
             <option value="">Подписать вручную</option>
@@ -102,7 +110,10 @@ export function PhotoTagger({ media }: PhotoTaggerProps) {
               </option>
             ))}
           </select>
-          <input value={draft.customName ?? ''} onChange={(event) => setDraft({ ...draft, customName: event.target.value })} />
+          <input
+            value={draft.customName ?? ''}
+            onChange={(event) => setDraft({ ...draft, customName: event.target.value })}
+          />
           <button
             type="button"
             onClick={() => {
@@ -117,4 +128,3 @@ export function PhotoTagger({ media }: PhotoTaggerProps) {
     </div>
   );
 }
-

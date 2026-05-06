@@ -1,0 +1,78 @@
+import { useState } from 'react';
+import { Mic, Upload } from 'lucide-react';
+import { useFamilyStore } from '../../store/familyStore';
+import { uploadMediaBlob } from '../../storage/SupabaseAdapter';
+import type { MediaItem } from '../../types/family';
+import { createId } from '../../utils/ids';
+
+type Props = { ownerId: string };
+
+function readDuration(file: File): Promise<number | undefined> {
+  return new Promise((resolve) => {
+    const url = URL.createObjectURL(file);
+    const audio = document.createElement('audio');
+    audio.preload = 'metadata';
+    audio.src = url;
+    audio.onloadedmetadata = () => {
+      const d = isFinite(audio.duration) ? Math.round(audio.duration) : undefined;
+      URL.revokeObjectURL(url);
+      resolve(d);
+    };
+    audio.onerror = () => {
+      URL.revokeObjectURL(url);
+      resolve(undefined);
+    };
+  });
+}
+
+export function AudioUploader({ ownerId }: Props) {
+  const treeId = useFamilyStore((s) => s.treeId);
+  const userRole = useFamilyStore((s) => s.userRole);
+  const addMediaItem = useFamilyStore((s) => s.addMediaItem);
+  const attachMediaToPerson = useFamilyStore((s) => s.attachMediaToPerson);
+  const [busy, setBusy] = useState(false);
+
+  const canEdit = userRole === 'owner' || userRole === 'editor';
+
+  if (!canEdit) return null;
+
+  return (
+    <label className="media-upload" aria-disabled={busy}>
+      {busy ? <Upload size={16} /> : <Mic size={16} />}
+      <span>{busy ? 'Загрузка…' : 'Загрузить аудио-историю'}</span>
+      <input
+        type="file"
+        accept="audio/*"
+        disabled={busy || !treeId}
+        onChange={async (event) => {
+          const file = event.target.files?.[0];
+          if (!file || !treeId) return;
+          setBusy(true);
+          try {
+            const id = createId('audio');
+            const ext = (file.name.split('.').pop() || 'mp3').toLowerCase();
+            const path = await uploadMediaBlob(treeId, id, file, ext);
+            const duration = await readDuration(file);
+            const media: MediaItem = {
+              id,
+              type: 'audio',
+              caption: file.name.replace(/\.[^.]+$/, ''),
+              tags: [],
+              ownerId,
+              storagePath: path,
+              durationSec: duration,
+            };
+            addMediaItem(media);
+            attachMediaToPerson(ownerId, id, 'audio');
+          } catch (err) {
+            console.error(err);
+            alert('Не удалось загрузить аудио: ' + (err as Error).message);
+          } finally {
+            setBusy(false);
+            event.currentTarget.value = '';
+          }
+        }}
+      />
+    </label>
+  );
+}

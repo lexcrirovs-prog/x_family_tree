@@ -2,22 +2,23 @@ import { memo } from 'react';
 import { Handle, Position, type NodeProps } from 'reactflow';
 import { Link } from 'react-router-dom';
 import { useFamilyStore } from '../../store/familyStore';
+import { useIsMuted } from '../../store/treeHoverStore';
 import { getInitials } from '../../utils/family';
 
 type ImportantNodeData = {
   importantId: string;
-  muted?: boolean;
 };
 
 export const ImportantNode = memo(function ImportantNode({ data }: NodeProps<ImportantNodeData>) {
   const important = useFamilyStore((state) => state.importantPeople[data.importantId]);
   const selectImportantPerson = useFamilyStore((state) => state.selectImportantPerson);
+  const muted = useIsMuted(data.importantId);
 
   if (!important) return null;
 
   return (
     <div
-      className={data.muted ? 'important-node important-node-muted' : 'important-node'}
+      className={muted ? 'important-node important-node-muted' : 'important-node'}
       onClick={() => selectImportantPerson(important.id)}
     >
       <Handle type="target" position={Position.Top} className="node-handle" />
