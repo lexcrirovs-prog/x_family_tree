@@ -3,6 +3,7 @@ import type { Session } from '@supabase/supabase-js';
 import { supabase } from '../../lib/supabase';
 import { seedSnapshot } from '../../data/seed';
 import { useFamilyStore } from '../../store/familyStore';
+import { getAuthRedirectUrl } from './authRedirect';
 import {
   createTree,
   listTrees,
@@ -101,7 +102,7 @@ export function AuthGate({ children }: Props) {
     try {
       const { error: err } = await supabase.auth.signInWithOtp({
         email,
-        options: { emailRedirectTo: window.location.origin },
+        options: { emailRedirectTo: getAuthRedirectUrl(window.location.origin) },
       });
       if (err) throw err;
       setEmailSent(true);
