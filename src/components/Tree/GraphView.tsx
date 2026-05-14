@@ -1,13 +1,16 @@
-import { useMemo } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import ReactFlow, {
   Background,
   Controls,
   MarkerType,
   MiniMap,
+  ReactFlowProvider,
+  useReactFlow,
   type Edge,
   type Node,
   type NodeMouseHandler,
+  type ReactFlowInstance,
 } from 'reactflow';
 import { useFamilyStore } from '../../store/familyStore';
 import { useTreeHoverStore } from '../../store/treeHoverStore';
@@ -17,6 +20,7 @@ import {
   getFullName,
   personMatchesSurname,
 } from '../../utils/family';
+import { usePanInertia } from '../../hooks/usePanInertia';
 import { PersonNode, type PersonNodeData } from './PersonNode';
 import { ImportantNode, type ImportantNodeData } from './ImportantNode';
 
@@ -25,7 +29,14 @@ const nodeTypes = {
   important: ImportantNode,
 };
 
-export function GraphView() {
+type ContextMenuState = {
+  x: number;
+  y: number;
+  nodeId: string;
+  kind: 'person' | 'important';
+};
+
+function GraphViewInner() {
   const people = useFamilyStore((state) => state.people);
   const couples = useFamilyStore((state) => state.couples);
   const importantPeople = useFamilyStore((state) => state.importantPeople);
@@ -39,17 +50,32 @@ export function GraphView() {
   const setImportantPosition = useFamilyStore((state) => state.setImportantPosition);
   const surnameFilter = useFamilyStore((state) => state.surnameFilter);
   const surnameFilterMode = useFamilyStore((state) => state.surnameFilterMode);
+  const kinshipMode = useFamilyStore((state) => state.kinshipMode);
+  const setKinshipAnchor = useFamilyStore((state) => state.setKinshipAnchor);
+  const addParents = useFamilyStore((state) => state.addParents);
+  const addSpouse = useFamilyStore((state) => state.addSpouse);
+  const softDeletePerson = useFamilyStore((state) => state.softDeletePerson);
+  const softDeleteImportant = useFamilyStore((state) => state.softDeleteImportantPerson);
+
   const navigate = useNavigate();
   const setHover = useTreeHoverStore((s) => s.setHover);
   const hoveredId = useTreeHoverStore((s) => s.hoveredId);
   const relatedIds = useTreeHoverStore((s) => s.relatedIds);
+  const rfRef = useRef<ReactFlowInstance | undefined>(undefined);
+  const reactFlowApi = useReactFlow();
+  rfRef.current = reactFlowApi;
+  const inertia = usePanInertia(() => rfRef.current);
+  const [menu, setMenu] = useState<ContextMenuState | undefined>();
 
   const surnameActive = Boolean(surnameFilter) && surnameFilterMode !== 'off';
-  const filterFn = (matches: boolean): 'hide' | 'mute' | 'show' => {
-    if (!surnameActive) return 'show';
-    if (matches) return 'show';
-    return surnameFilterMode === 'only' ? 'hide' : 'mute';
-  };
+  const filterFn = useCallback(
+    (matches: boolean): 'hide' | 'mute' | 'show' => {
+      if (!surnameActive) return 'show';
+      if (matches) return 'show';
+      return surnameFilterMode === 'only' ? 'hide' : 'mute';
+    },
+    [surnameActive, surnameFilterMode],
+  );
 
   const nodes = useMemo(() => {
     const generationGap = 210;
@@ -94,7 +120,6 @@ export function GraphView() {
       importantsList.forEach((important, index) => {
         const firstLink = important.linkedTo[0];
         const linkedPerson = firstLink?.type === 'person' ? people[firstLink.id] : undefined;
-        // Important persons match if linked person matches.
         const matches = surnameFilter
           ? linkedPerson
             ? personMatchesSurname(linkedPerson, surnameFilter)
@@ -119,12 +144,12 @@ export function GraphView() {
     couples,
     events,
     focusedPersonId,
+    filterFn,
     importantPeople,
     media,
     people,
     showImportantPeople,
     surnameFilter,
-    surnameFilterMode,
   ]);
 
   const edges = useMemo(() => {
@@ -132,8 +157,8 @@ export function GraphView() {
     const isVisible = (id: string): boolean => nodes.some((n) => n.id === id);
 
     Object.values(couples).forEach((couple) => {
-      if (!isVisible(couple.partnerAId) || !isVisible(couple.partnerBId)) {
-        if (surnameFilterMode === 'only') return;
+      if (surnameFilterMode === 'only') {
+        if (!isVisible(couple.partnerAId) || !isVisible(couple.partnerBId)) return;
       }
       list.push({
         id: `spouse-${couple.id}`,
@@ -197,20 +222,49 @@ export function GraphView() {
   const handleLeave: NodeMouseHandler = () =>
     setHover(undefined, { people, couples, importantPeople, events, media });
 
+  const handleClick: NodeMouseHandler = (_, node) => {
+    if (kinshipMode && people[node.id]) {
+      setKinshipAnchor(node.id);
+      return;
+    }
+    if (people[node.id]) selectPerson(node.id);
+  };
+
+  const handleContextMenu = (event: React.MouseEvent, node: Node) => {
+    event.preventDefault();
+    setMenu({
+      x: event.clientX,
+      y: event.clientY,
+      nodeId: node.id,
+      kind: people[node.id] ? 'person' : 'important',
+    });
+  };
+
+  const closeMenu = () => setMenu(undefined);
+
   return (
-    <div className="tree-surface graph-surface">
+    <div
+      className="tree-surface graph-surface"
+      onClick={(e) => {
+        if (menu) closeMenu();
+        // don't stop propagation — ReactFlow needs its own clicks
+        void e;
+      }}
+    >
       <ReactFlow
         nodes={nodes}
         edges={edges}
         nodeTypes={nodeTypes}
-        onNodeClick={(_, node) => {
-          if (people[node.id]) selectPerson(node.id);
+        onInit={(instance) => {
+          rfRef.current = instance;
         }}
+        onNodeClick={handleClick}
         onNodeDoubleClick={(_, node) => {
           if (people[node.id]) navigate(`/person/${node.id}`);
         }}
         onNodeMouseEnter={handleEnter}
         onNodeMouseLeave={handleLeave}
+        onNodeContextMenu={handleContextMenu}
         onNodeDragStop={(_, node) => {
           if (people[node.id]) {
             setPersonPosition(node.id, node.position.x, node.position.y);
@@ -218,17 +272,113 @@ export function GraphView() {
             setImportantPosition(node.id, node.position.x, node.position.y);
           }
         }}
-        onPaneClick={() => setFocusedPerson(undefined)}
+        onMoveStart={inertia.onMoveStart}
+        onMove={inertia.onMove}
+        onMoveEnd={inertia.onMoveEnd}
+        onPaneClick={() => {
+          setFocusedPerson(undefined);
+          closeMenu();
+        }}
         fitView
         minZoom={0.25}
         maxZoom={1.5}
         nodesDraggable
+        panOnScrollSpeed={0.6}
         proOptions={{ hideAttribution: true }}
       >
         <Background gap={28} size={1} color="rgba(255,255,255,.08)" />
         <MiniMap pannable zoomable className="mini-map" />
         <Controls className="flow-controls" />
       </ReactFlow>
+      {menu && (
+        <div
+          className="ctx-menu"
+          style={{ left: menu.x, top: menu.y }}
+          role="menu"
+          onClick={(e) => e.stopPropagation()}
+        >
+          {menu.kind === 'person' && people[menu.nodeId] ? (
+            <>
+              <button
+                type="button"
+                onClick={() => {
+                  selectPerson(menu.nodeId);
+                  navigate(`/person/${menu.nodeId}`);
+                  closeMenu();
+                }}
+              >
+                Открыть профиль
+              </button>
+              {!people[menu.nodeId].parentCoupleId && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    addParents(menu.nodeId);
+                    closeMenu();
+                  }}
+                >
+                  + Добавить родителей
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={() => {
+                  addSpouse(menu.nodeId);
+                  closeMenu();
+                }}
+              >
+                + Добавить супруга/у
+              </button>
+              <button
+                type="button"
+                className="danger-action"
+                onClick={() => {
+                  if (
+                    confirm(
+                      `Удалить ${getFullName(people[menu.nodeId])}? Восстановить можно из корзины.`,
+                    )
+                  ) {
+                    softDeletePerson(menu.nodeId);
+                  }
+                  closeMenu();
+                }}
+              >
+                Удалить
+              </button>
+            </>
+          ) : (
+            <>
+              <button
+                type="button"
+                onClick={() => {
+                  navigate(`/important-person/${menu.nodeId}`);
+                  closeMenu();
+                }}
+              >
+                Открыть профиль
+              </button>
+              <button
+                type="button"
+                className="danger-action"
+                onClick={() => {
+                  softDeleteImportant(menu.nodeId);
+                  closeMenu();
+                }}
+              >
+                Удалить
+              </button>
+            </>
+          )}
+        </div>
+      )}
     </div>
+  );
+}
+
+export function GraphView() {
+  return (
+    <ReactFlowProvider>
+      <GraphViewInner />
+    </ReactFlowProvider>
   );
 }

@@ -1,6 +1,6 @@
 import { ChangeEvent } from 'react';
 import { Outlet } from 'react-router-dom';
-import { Download, Eye, EyeOff, Move, Moon, RotateCcw, Sun, Type, Undo2, Upload } from 'lucide-react';
+import { Download, Eye, EyeOff, GitBranch, Move, Moon, RotateCcw, Sun, Type, Undo2, Upload } from 'lucide-react';
 import { useFamilyStore } from '../../store/familyStore';
 import type { FamilySnapshot } from '../../types/family';
 import { downloadJson, readJsonFile } from '../../utils/download';
@@ -38,6 +38,8 @@ export function AppShell() {
   const resetSeed = useFamilyStore((state) => state.resetSeed);
   const resetAllPositions = useFamilyStore((state) => state.resetAllPositions);
   const importSnapshot = useFamilyStore((state) => state.importSnapshot);
+  const kinshipMode = useFamilyStore((state) => state.kinshipMode);
+  const toggleKinshipMode = useFamilyStore((state) => state.toggleKinshipMode);
   const people = useFamilyStore((state) => state.people);
   const couples = useFamilyStore((state) => state.couples);
   const importantPeople = useFamilyStore((state) => state.importantPeople);
@@ -71,6 +73,17 @@ export function AppShell() {
         <div className="toolbar-actions">
           <SurnameFilter />
           <BirthdayWidget />
+          <button
+            type="button"
+            className={`toolbar-button${kinshipMode ? ' toolbar-button-active' : ''}`}
+            onClick={toggleKinshipMode}
+            title="Режим «Кто кому кем»: клик по узлу делает его якорем, под остальными появятся подписи родства"
+            aria-label="Режим родства"
+            aria-pressed={kinshipMode}
+          >
+            <GitBranch size={16} />
+            <span>Родство</span>
+          </button>
           <button
             type="button"
             className="toolbar-button"

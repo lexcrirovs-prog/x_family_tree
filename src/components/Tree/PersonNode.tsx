@@ -1,11 +1,13 @@
 import { memo, useEffect, useRef, useState } from 'react';
 import { Handle, Position, type NodeProps } from 'reactflow';
 import { Link, useNavigate } from 'react-router-dom';
-import { Plus, Star } from 'lucide-react';
+import { Camera, Plus, Star } from 'lucide-react';
 import { indexedDBMediaAdapter } from '../../storage/IndexedDBAdapter';
 import { useFamilyStore } from '../../store/familyStore';
 import { useIsMuted } from '../../store/treeHoverStore';
 import { getFullName, getInitials, getYears } from '../../utils/family';
+import { kinshipLabel } from '../../utils/kinship';
+import { uploadPhotoForPerson } from '../../utils/uploadPhoto';
 
 type PersonNodeData = {
   personId: string;
@@ -27,6 +29,8 @@ function AvatarThumb({
       state.people[personId]?.primaryPhotoId ?? state.people[personId]?.photoIds?.[0],
   );
   const [url, setUrl] = useState<string | undefined>();
+  const fileRef = useRef<HTMLInputElement | null>(null);
+  const [uploading, setUploading] = useState(false);
 
   useEffect(() => {
     if (!photoId) {
@@ -47,17 +51,50 @@ function AvatarThumb({
   }, [photoId]);
 
   return (
-    <button
-      type="button"
-      className="avatar avatar-button"
-      onClick={(event) => {
-        event.stopPropagation();
-        onOpenGallery();
-      }}
-      title="Открыть галерею по вехам жизни"
-    >
-      {url ? <img src={url} alt={initials} /> : <span>{initials}</span>}
-    </button>
+    <div className="avatar-wrap">
+      <button
+        type="button"
+        className="avatar avatar-button"
+        onClick={(event) => {
+          event.stopPropagation();
+          onOpenGallery();
+        }}
+        title="Открыть галерею по вехам жизни"
+      >
+        {url ? <img src={url} alt={initials} /> : <span>{initials}</span>}
+      </button>
+      <input
+        type="file"
+        accept="image/*"
+        ref={fileRef}
+        style={{ display: 'none' }}
+        onChange={async (e) => {
+          const file = e.target.files?.[0];
+          if (!file) return;
+          setUploading(true);
+          try {
+            await uploadPhotoForPerson(personId, file, { makePrimary: true });
+          } catch (err) {
+            console.error(err);
+          } finally {
+            setUploading(false);
+            e.currentTarget.value = '';
+          }
+        }}
+      />
+      <button
+        type="button"
+        className={`avatar-camera-overlay${uploading ? ' avatar-camera-busy' : ''}`}
+        onClick={(e) => {
+          e.stopPropagation();
+          fileRef.current?.click();
+        }}
+        title="Загрузить или обновить главное фото"
+        aria-label="Загрузить фото"
+      >
+        <Camera size={11} />
+      </button>
+    </div>
   );
 }
 
@@ -67,6 +104,11 @@ export const PersonNode = memo(function PersonNode({ data }: NodeProps<PersonNod
   const selectPerson = useFamilyStore((state) => state.selectPerson);
   const addParents = useFamilyStore((state) => state.addParents);
   const addImportantPerson = useFamilyStore((state) => state.addImportantPerson);
+  const kinshipMode = useFamilyStore((state) => state.kinshipMode);
+  const kinshipAnchorId = useFamilyStore((state) => state.kinshipAnchorId);
+  const setKinshipAnchor = useFamilyStore((state) => state.setKinshipAnchor);
+  const allPeople = useFamilyStore((state) => state.people);
+  const allCouples = useFamilyStore((state) => state.couples);
   const muted = useIsMuted(data.personId) || data.filterMuted;
   const ref = useRef<HTMLDivElement | null>(null);
   const navigate = useNavigate();
@@ -75,6 +117,21 @@ export const PersonNode = memo(function PersonNode({ data }: NodeProps<PersonNod
 
   const isSelected = selectedPersonId === person.id;
   const isSoftDeleted = person.isDeleted;
+  const isAnchor = kinshipMode && kinshipAnchorId === person.id;
+  const kinship =
+    kinshipMode && kinshipAnchorId && kinshipAnchorId !== person.id
+      ? kinshipLabel(
+          {
+            people: allPeople,
+            couples: allCouples,
+            importantPeople: {},
+            events: {},
+            media: {},
+          },
+          kinshipAnchorId,
+          person.id,
+        )
+      : undefined;
 
   const className = [
     'person-node',
@@ -83,6 +140,7 @@ export const PersonNode = memo(function PersonNode({ data }: NodeProps<PersonNod
     muted ? 'person-node-muted' : '',
     isSelected ? 'person-node-selected' : '',
     isSoftDeleted ? 'person-node-deleted' : '',
+    isAnchor ? 'person-node-anchor' : '',
   ]
     .filter(Boolean)
     .join(' ');
@@ -103,7 +161,13 @@ export const PersonNode = memo(function PersonNode({ data }: NodeProps<PersonNod
       onPointerLeave={() => {
         if (ref.current) ref.current.style.transform = '';
       }}
-      onClick={() => selectPerson(person.id)}
+      onClick={() => {
+        if (kinshipMode) {
+          setKinshipAnchor(person.id);
+        } else {
+          selectPerson(person.id);
+        }
+      }}
     >
       <Handle type="target" position={Position.Top} className="node-handle" />
       <div className="person-node-top">
@@ -117,6 +181,8 @@ export const PersonNode = memo(function PersonNode({ data }: NodeProps<PersonNod
           <span>{getYears(person)}</span>
         </div>
       </div>
+      {kinship && <div className="kinship-chip">{kinship}</div>}
+      {isAnchor && <div className="kinship-chip kinship-chip-anchor">← якорь</div>}
       <div className="person-node-actions">
         {!person.parentCoupleId && (
           <button

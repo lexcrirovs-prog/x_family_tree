@@ -44,6 +44,16 @@ export function personMatchesSurname(person: Person, surname: string): boolean {
   return person.lastName === surname || person.maidenName === surname;
 }
 
+export const IMPORTANT_RELATIONS: ReadonlyArray<{ key: string; label: string; icon: string }> = [
+  { key: 'отчим', label: 'Отчим', icon: '👨' },
+  { key: 'мачеха', label: 'Мачеха', icon: '👩' },
+  { key: 'крёстный', label: 'Крёстный', icon: '✝' },
+  { key: 'крёстная', label: 'Крёстная', icon: '✝' },
+  { key: 'наставник', label: 'Наставник', icon: '🎓' },
+  { key: 'друг семьи', label: 'Друг семьи', icon: '🤝' },
+  { key: 'няня', label: 'Няня', icon: '🍼' },
+];
+
 export function findCoupleByPartners(couples: Record<string, Couple>, a: string, b: string): Couple | undefined {
   return Object.values(couples).find(
     (couple) =>

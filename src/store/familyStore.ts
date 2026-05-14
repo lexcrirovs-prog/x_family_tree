@@ -31,6 +31,8 @@ type FamilyStore = FamilySnapshot & {
   showImportantPeople: boolean;
   surnameFilter?: string;
   surnameFilterMode: SurnameFilterMode;
+  kinshipMode: boolean;
+  kinshipAnchorId?: string;
   recentPersonIds: string[];
   changeLog: ChangeLogEntry[];
   hydrated: boolean;
@@ -49,7 +51,16 @@ type FamilyStore = FamilySnapshot & {
   addParents: (childId: string) => void;
   addSpouse: (personId: string) => void;
   addChild: (coupleId: string) => void;
-  addImportantPerson: (target: { type: 'person' | 'couple'; id: string }) => void;
+  addImportantPerson: (
+    target: { type: 'person' | 'couple'; id: string },
+    seed?: Partial<ImportantPerson>,
+  ) => void;
+  unpairPartners: (coupleId: string) => void;
+  linkPartners: (partnerAId: string, partnerBId: string) => string | undefined;
+  attachChildToCouple: (coupleId: string, childId: string) => void;
+  detachChildFromCouple: (childId: string) => void;
+  toggleKinshipMode: () => void;
+  setKinshipAnchor: (id?: string) => void;
   addLifeEvent: (
     owner: { ownerType: LifeEvent['ownerType']; ownerId: string },
     seed?: Partial<LifeEvent>,
@@ -118,6 +129,8 @@ export const useFamilyStore = create<FamilyStore>()(
   showImportantPeople: true,
   surnameFilter: undefined,
   surnameFilterMode: 'off' as SurnameFilterMode,
+  kinshipMode: false,
+  kinshipAnchorId: undefined,
   recentPersonIds: ['me'],
   changeLog: [],
   hydrated: false,
@@ -285,25 +298,121 @@ export const useFamilyStore = create<FamilyStore>()(
         ...withLog(state, `Добавлен ребёнок для пары ${coupleId}`),
       };
     }),
-  addImportantPerson: (target) =>
+  addImportantPerson: (target, seed) =>
     set((state) => {
       const id = createId('important');
       const important: ImportantPerson = {
         id,
-        firstName: 'Важный',
-        lastName: 'человек',
-        relationshipType: 'друг семьи',
-        importance: 'Опишите, почему этот человек важен для семейной истории.',
-        photoIds: [],
-        videoIds: [],
-        linkedTo: [target],
+        firstName: seed?.firstName ?? 'Важный',
+        lastName: seed?.lastName ?? 'человек',
+        relationshipType: seed?.relationshipType ?? 'друг семьи',
+        importance:
+          seed?.importance ?? 'Опишите, почему этот человек важен для семейной истории.',
+        photoIds: seed?.photoIds ?? [],
+        videoIds: seed?.videoIds ?? [],
+        bio: seed?.bio,
+        birthYear: seed?.birthYear,
+        deathYear: seed?.deathYear,
+        linkedTo: seed?.linkedTo ?? [target],
       };
       return {
         importantPeople: { ...state.importantPeople, [id]: important },
         selectedImportantPersonId: id,
-        ...withLog(state, 'Добавлен важный человек'),
+        ...withLog(state, `Добавлен: ${important.relationshipType}`),
       };
     }),
+  unpairPartners: (coupleId) =>
+    set((state) => {
+      const couple = state.couples[coupleId];
+      if (!couple) return {};
+      const couples = { ...state.couples };
+      delete couples[coupleId];
+      const people = { ...state.people };
+      for (const childId of couple.childrenIds) {
+        if (people[childId]?.parentCoupleId === coupleId) {
+          people[childId] = { ...people[childId], parentCoupleId: undefined };
+        }
+      }
+      return {
+        couples,
+        people,
+        ...withLog(state, `Пара ${coupleId} расторгнута`),
+      };
+    }),
+  linkPartners: (partnerAId, partnerBId) => {
+    let createdId: string | undefined;
+    set((state) => {
+      if (!state.people[partnerAId] || !state.people[partnerBId]) return {};
+      const existing = Object.values(state.couples).find(
+        (c) =>
+          (c.partnerAId === partnerAId && c.partnerBId === partnerBId) ||
+          (c.partnerAId === partnerBId && c.partnerBId === partnerAId),
+      );
+      if (existing) {
+        createdId = existing.id;
+        return {};
+      }
+      const id = createId('couple');
+      const couple: Couple = {
+        id,
+        partnerAId,
+        partnerBId,
+        childrenIds: [],
+        lifeEventIds: [],
+      };
+      createdId = id;
+      return {
+        couples: { ...state.couples, [id]: couple },
+        ...withLog(
+          state,
+          `Создана пара: ${state.people[partnerAId]?.firstName} ↔ ${state.people[partnerBId]?.firstName}`,
+        ),
+      };
+    });
+    return createdId;
+  },
+  attachChildToCouple: (coupleId, childId) =>
+    set((state) => {
+      const couple = state.couples[coupleId];
+      const child = state.people[childId];
+      if (!couple || !child) return {};
+      const childrenIds = couple.childrenIds.includes(childId)
+        ? couple.childrenIds
+        : [...couple.childrenIds, childId];
+      return {
+        couples: { ...state.couples, [coupleId]: { ...couple, childrenIds } },
+        people: { ...state.people, [childId]: { ...child, parentCoupleId: coupleId } },
+        ...withLog(state, `Привязан ребёнок ${child.firstName} к паре`),
+      };
+    }),
+  detachChildFromCouple: (childId) =>
+    set((state) => {
+      const child = state.people[childId];
+      if (!child || !child.parentCoupleId) return {};
+      const couple = state.couples[child.parentCoupleId];
+      if (!couple) {
+        return {
+          people: { ...state.people, [childId]: { ...child, parentCoupleId: undefined } },
+        };
+      }
+      return {
+        people: { ...state.people, [childId]: { ...child, parentCoupleId: undefined } },
+        couples: {
+          ...state.couples,
+          [couple.id]: {
+            ...couple,
+            childrenIds: couple.childrenIds.filter((id) => id !== childId),
+          },
+        },
+        ...withLog(state, `Открепил ребёнка ${child.firstName} от пары`),
+      };
+    }),
+  toggleKinshipMode: () =>
+    set((state) => ({
+      kinshipMode: !state.kinshipMode,
+      kinshipAnchorId: !state.kinshipMode ? state.selectedPersonId : state.kinshipAnchorId,
+    })),
+  setKinshipAnchor: (id) => set({ kinshipAnchorId: id }),
   addLifeEvent: (owner, seed) =>
     set((state) => {
       const id = createId('event');
