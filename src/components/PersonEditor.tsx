@@ -1,5 +1,6 @@
+import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Baby, Heart, Images, Mic, MicOff, Plus, RotateCcw, Trash2, UserRoundPlus, X } from 'lucide-react';
+import { Baby, Heart, Images, Mic, MicOff, Plus, RotateCcw, Trash2, UserRoundPlus, Users, X } from 'lucide-react';
 import { useFamilyStore } from '../store/familyStore';
 import type { Gender, Person } from '../types/family';
 import {
@@ -67,6 +68,8 @@ export function PersonEditor() {
   const restoreImportant = useFamilyStore((state) => state.restoreImportantPerson);
   const unpairPartners = useFamilyStore((state) => state.unpairPartners);
   const linkPartners = useFamilyStore((state) => state.linkPartners);
+  const detachChildFromCouple = useFamilyStore((state) => state.detachChildFromCouple);
+  const attachChildToCouple = useFamilyStore((state) => state.attachChildToCouple);
   const addParents = useFamilyStore((state) => state.addParents);
   const addSpouse = useFamilyStore((state) => state.addSpouse);
   const addChild = useFamilyStore((state) => state.addChild);
@@ -288,6 +291,17 @@ export function PersonEditor() {
         </label>
       </div>
 
+      <ParentsPicker
+        person={person}
+        people={snapshot.people}
+        couples={snapshot.couples}
+        onApply={(fatherId, motherId) => {
+          if (person.parentCoupleId) detachChildFromCouple(person.id);
+          const coupleId = linkPartners(fatherId, motherId);
+          if (coupleId) attachChildToCouple(coupleId, person.id);
+        }}
+      />
+
       <div className="action-grid">
         {!hasResolvedParents(snapshot, person.id) && (
           <button type="button" onClick={() => addParents(person.id)}>
@@ -464,6 +478,106 @@ export function PersonEditor() {
         </section>
       </details>
     </aside>
+  );
+}
+
+function ParentsPicker({
+  person,
+  people,
+  couples,
+  onApply,
+}: {
+  person: Person;
+  people: Record<string, Person>;
+  couples: Record<string, { id: string; partnerAId: string; partnerBId: string }>;
+  onApply: (fatherId: string, motherId: string) => void;
+}) {
+  const currentCouple = person.parentCoupleId ? couples[person.parentCoupleId] : undefined;
+  const currentA = currentCouple?.partnerAId;
+  const currentB = currentCouple?.partnerBId;
+  const currentFather =
+    currentA && people[currentA]?.gender === 'male'
+      ? currentA
+      : currentB && people[currentB]?.gender === 'male'
+      ? currentB
+      : '';
+  const currentMother =
+    currentA && people[currentA]?.gender === 'female'
+      ? currentA
+      : currentB && people[currentB]?.gender === 'female'
+      ? currentB
+      : '';
+
+  const [fatherId, setFatherId] = useState<string>(currentFather);
+  const [motherId, setMotherId] = useState<string>(currentMother);
+
+  const males = useMemo(
+    () =>
+      Object.values(people)
+        .filter((p) => !p.isDeleted && p.id !== person.id && p.gender === 'male')
+        .sort((a, b) => getFullName(a).localeCompare(getFullName(b))),
+    [people, person.id],
+  );
+  const females = useMemo(
+    () =>
+      Object.values(people)
+        .filter((p) => !p.isDeleted && p.id !== person.id && p.gender === 'female')
+        .sort((a, b) => getFullName(a).localeCompare(getFullName(b))),
+    [people, person.id],
+  );
+
+  const dirty = fatherId !== currentFather || motherId !== currentMother;
+  const valid = fatherId && motherId && fatherId !== motherId;
+
+  return (
+    <section className="parents-picker">
+      <small>
+        <Users size={12} style={{ display: 'inline', verticalAlign: 'middle', marginRight: 4 }} />
+        Указать родителей из дерева
+      </small>
+      <div className="parents-picker-row">
+        <label>
+          <span>Отец</span>
+          <select value={fatherId} onChange={(e) => setFatherId(e.target.value)}>
+            <option value="">— не указан —</option>
+            {males.map((m) => (
+              <option key={m.id} value={m.id}>
+                {getFullName(m)}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label>
+          <span>Мать</span>
+          <select value={motherId} onChange={(e) => setMotherId(e.target.value)}>
+            <option value="">— не указана —</option>
+            {females.map((m) => (
+              <option key={m.id} value={m.id}>
+                {getFullName(m)}
+              </option>
+            ))}
+          </select>
+        </label>
+        <button
+          type="button"
+          disabled={!valid || !dirty}
+          onClick={() => onApply(fatherId, motherId)}
+          title={
+            !valid
+              ? 'Выберите и отца, и мать (разных людей)'
+              : !dirty
+              ? 'Уже эти родители'
+              : 'Привязать'
+          }
+        >
+          Привязать
+        </button>
+      </div>
+      <small className="parents-picker-hint">
+        Если эти двое ещё не были парой — она будет создана автоматически. Если у ребёнка уже стояли
+        другие родители — связь будет переключена.
+      </small>
+    </section>
   );
 }
 

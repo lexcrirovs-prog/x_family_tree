@@ -2760,6 +2760,82 @@ select option {
   }
 }
 
+/* ===== Parents picker (set parents from existing tree) ===== */
+.parents-picker {
+  display: grid;
+  gap: 6px;
+  margin: 12px 0;
+  padding: 10px;
+  border: 1px solid var(--soft-border);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.025);
+}
+
+.parents-picker > small {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.parents-picker-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr auto;
+  gap: 8px;
+  align-items: end;
+}
+
+.parents-picker-row label {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.parents-picker-row label span {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.parents-picker-row select {
+  width: 100%;
+  border: 1px solid var(--soft-border);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text);
+  border-radius: 6px;
+  padding: 6px 7px;
+  font-size: 12px;
+}
+
+.theme-light .parents-picker-row select {
+  background: var(--bg-elevated);
+}
+
+.parents-picker-row button {
+  border: 1px solid rgba(87, 208, 196, 0.45);
+  border-radius: 6px;
+  background: rgba(87, 208, 196, 0.16);
+  color: #b6ece3;
+  padding: 7px 10px;
+  font-size: 12px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.parents-picker-row button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.parents-picker-hint {
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+@media (max-width: 760px) {
+  .parents-picker-row {
+    grid-template-columns: 1fr;
+  }
+}
+
 /* ===== Inspector collapsible spoiler ===== */
 .inspector-spoiler {
   border-top: 1px solid var(--soft-border);
