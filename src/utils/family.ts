@@ -110,6 +110,7 @@ export function eventIcon(type: LifeEvent['type']): string {
     death: '×',
     education: '∴',
     work: '▦',
+    military: '⚔',
     retirement: '☕',
     move: '↗',
     achievement: '★',

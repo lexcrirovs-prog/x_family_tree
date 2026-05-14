@@ -15,12 +15,14 @@ import type {
 import { createId } from '../utils/ids';
 
 export type TreeRole = 'owner' | 'editor' | 'viewer';
+export type UiScale = 'normal' | 'large' | 'huge';
 
 type FamilyStore = FamilySnapshot & {
   treeId?: string;
   userRole?: TreeRole;
   mode: ViewMode;
   theme: ThemeMode;
+  uiScale: UiScale;
   selectedPersonId: string;
   selectedImportantPersonId?: string;
   focusedPersonId?: string;
@@ -33,6 +35,7 @@ type FamilyStore = FamilySnapshot & {
   hydrate: (snapshot: FamilySnapshot) => void;
   setMode: (mode: ViewMode) => void;
   toggleTheme: () => void;
+  cycleUiScale: () => void;
   selectPerson: (id: string) => void;
   selectImportantPerson: (id?: string) => void;
   setFocusedPerson: (id?: string) => void;
@@ -93,6 +96,7 @@ export const useFamilyStore = create<FamilyStore>()(
   userRole: 'owner' as TreeRole,
   mode: 'graph',
   theme: 'dark',
+  uiScale: 'normal' as UiScale,
   selectedPersonId: 'me',
   selectedImportantPersonId: undefined,
   focusedPersonId: undefined,
@@ -121,6 +125,12 @@ export const useFamilyStore = create<FamilyStore>()(
     }),
   setMode: (mode) => set({ mode }),
   toggleTheme: () => set((state) => ({ theme: state.theme === 'dark' ? 'light' : 'dark' })),
+  cycleUiScale: () =>
+    set((state) => {
+      const order: UiScale[] = ['normal', 'large', 'huge'];
+      const next = order[(order.indexOf(state.uiScale) + 1) % order.length];
+      return { uiScale: next };
+    }),
   selectPerson: (id) =>
     set((state) => ({
       selectedPersonId: id,
@@ -470,6 +480,7 @@ export const useFamilyStore = create<FamilyStore>()(
         media: state.media,
         mode: state.mode,
         theme: state.theme,
+        uiScale: state.uiScale,
         selectedPersonId: state.selectedPersonId,
         fanRootId: state.fanRootId,
         showImportantPeople: state.showImportantPeople,

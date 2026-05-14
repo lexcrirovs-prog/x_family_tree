@@ -72,9 +72,13 @@ export function PersonProfile() {
             <TreePine size={16} />
             Показать на дереве
           </button>
-          <button type="button">
+          <button
+            type="button"
+            onClick={() => window.print()}
+            title="Открыть системный диалог печати (или сохранить как PDF)"
+          >
             <FileDown size={16} />
-            Экспорт профиля в PDF
+            Печать / PDF
           </button>
         </div>
       </header>

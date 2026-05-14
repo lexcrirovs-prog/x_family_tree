@@ -1,11 +1,12 @@
 import { useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { ArrowLeft, Plus, Trash2, TreePine, X } from 'lucide-react';
+import { ArrowLeft, Link as LinkIcon, Mic, MicOff, Plus, Trash2, TreePine, X } from 'lucide-react';
 import { indexedDBMediaAdapter } from '../../storage/IndexedDBAdapter';
 import { useFamilyStore } from '../../store/familyStore';
 import type { LifeEvent, MediaItem } from '../../types/family';
 import { eventIcon, getEventsForPerson, getFullName, getYears } from '../../utils/family';
-import { LIFE_STAGES, getStageOf, type StageKey } from '../../utils/lifeStages';
+import { getStageOf, stagesForGender, type StageKey } from '../../utils/lifeStages';
+import { useSpeechToText } from '../../hooks/useSpeechToText';
 import { Breadcrumbs } from '../layout/Breadcrumbs';
 import { EventMediaUploader } from '../Media/EventMediaUploader';
 
@@ -31,16 +32,19 @@ export function LifeGallery() {
     );
   }
 
+  const stages = stagesForGender(person.gender);
   const allEvents = getEventsForPerson(snapshot, person.id);
   const byStage = new Map<StageKey, LifeEvent[]>();
-  for (const stage of LIFE_STAGES) byStage.set(stage.key, []);
+  for (const stage of stages) byStage.set(stage.key, []);
   for (const event of allEvents) {
     const stageKey = getStageOf(event.type);
+    if (!byStage.has(stageKey)) byStage.set(stageKey, []);
     byStage.get(stageKey)!.push(event);
   }
 
   const handleAddEvent = (stage: StageKey) => {
-    const stageMeta = LIFE_STAGES.find((s) => s.key === stage)!;
+    const stageMeta = stages.find((s) => s.key === stage);
+    if (!stageMeta) return;
     addLifeEvent(
       { ownerType: 'person', ownerId: person.id },
       { type: stageMeta.defaultEventType, title: stageMeta.title },
@@ -111,7 +115,7 @@ export function LifeGallery() {
       </header>
 
       <div className="life-gallery-grid">
-        {LIFE_STAGES.map((stage) => {
+        {stages.map((stage) => {
           const events = byStage.get(stage.key) ?? [];
           return (
             <section key={stage.key} className="stage-section">
@@ -176,6 +180,13 @@ function EventCard({
   const photos = event.photoIds.map((mid) => mediaMap[mid]).filter(Boolean);
   const videos = event.videoIds.map((mid) => mediaMap[mid]).filter(Boolean);
   const audios = (event.audioIds ?? []).map((mid) => mediaMap[mid]).filter(Boolean);
+  const desc = useSpeechToText({
+    lang: 'ru-RU',
+    onResult: (text) => {
+      const next = (event.description ?? '').trim();
+      onChange({ description: next ? next + ' ' + text : text });
+    },
+  });
 
   return (
     <article className="event-card-gallery">
@@ -202,12 +213,46 @@ function EventCard({
               placeholder="Место"
             />
           </div>
-          <textarea
-            className="event-description"
-            value={event.description ?? ''}
-            onChange={(e) => onChange({ description: e.target.value || undefined })}
-            placeholder="Описание, воспоминания, контекст…"
-          />
+          <div className="event-description-wrap">
+            <textarea
+              className="event-description"
+              value={event.description ?? ''}
+              onChange={(e) => onChange({ description: e.target.value || undefined })}
+              placeholder="Описание, воспоминания, контекст…"
+            />
+            {desc.supported && (
+              <button
+                type="button"
+                className={`mic-toggle${desc.isRecording ? ' mic-active' : ''}`}
+                onClick={() => (desc.isRecording ? desc.stop() : desc.start())}
+                title={desc.isRecording ? 'Остановить запись' : 'Надиктовать голосом (ru-RU)'}
+              >
+                {desc.isRecording ? <MicOff size={12} /> : <Mic size={12} />}
+                {desc.isRecording ? 'Слушаю…' : 'Голос'}
+              </button>
+            )}
+          </div>
+          <div className="event-link-row">
+            <LinkIcon size={14} />
+            <input
+              className="event-link"
+              type="url"
+              value={event.link ?? ''}
+              placeholder="Ссылка — например, статья в Википедии о заводе/школе/городе"
+              onChange={(e) => onChange({ link: e.target.value || undefined })}
+            />
+            {event.link && (
+              <a
+                href={event.link}
+                target="_blank"
+                rel="noreferrer"
+                className="event-link-open"
+                title="Открыть ссылку в новой вкладке"
+              >
+                Открыть ↗
+              </a>
+            )}
+          </div>
         </div>
         <button
           type="button"

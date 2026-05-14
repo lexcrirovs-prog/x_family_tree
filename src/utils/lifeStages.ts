@@ -1,4 +1,4 @@
-import type { LifeEventType } from '../types/family';
+import type { Gender, LifeEventType } from '../types/family';
 
 export type StageKey =
   | 'birth'
@@ -6,6 +6,7 @@ export type StageKey =
   | 'marriage'
   | 'children'
   | 'work'
+  | 'military'
   | 'retirement'
   | 'memorable';
 
@@ -17,6 +18,8 @@ export type LifeStage = {
   defaultEventType: LifeEventType;
   /** Event types that belong to this stage. The first match wins when grouping. */
   types: LifeEventType[];
+  /** Show this stage only for the given gender; undefined = visible to all. */
+  requiresGender?: Gender;
 };
 
 export const LIFE_STAGES: LifeStage[] = [
@@ -51,9 +54,17 @@ export const LIFE_STAGES: LifeStage[] = [
   {
     key: 'work',
     title: 'Работа',
-    description: 'Карьера, достижения, важные проекты.',
+    description: 'Карьера, достижения, важные проекты. Прикрепите ссылку на сайт компании или статью в Вики.',
     defaultEventType: 'work',
     types: ['work', 'achievement'],
+  },
+  {
+    key: 'military',
+    title: 'Военная служба',
+    description: 'Срок службы, часть, награды, фронтовые письма.',
+    defaultEventType: 'military',
+    types: ['military'],
+    requiresGender: 'male',
   },
   {
     key: 'retirement',
@@ -83,4 +94,31 @@ const STAGE_BY_TYPE: Map<LifeEventType, StageKey> = (() => {
 
 export function getStageOf(type: LifeEventType): StageKey {
   return STAGE_BY_TYPE.get(type) ?? 'memorable';
+}
+
+export function stageIcon(key: StageKey): string {
+  switch (key) {
+    case 'birth':
+      return '🍼';
+    case 'school':
+      return '✎';
+    case 'marriage':
+      return '◇';
+    case 'children':
+      return '+';
+    case 'work':
+      return '▦';
+    case 'military':
+      return '⚔';
+    case 'retirement':
+      return '☕';
+    case 'memorable':
+      return '❖';
+    default:
+      return '•';
+  }
+}
+
+export function stagesForGender(gender?: Gender): LifeStage[] {
+  return LIFE_STAGES.filter((s) => !s.requiresGender || s.requiresGender === gender);
 }

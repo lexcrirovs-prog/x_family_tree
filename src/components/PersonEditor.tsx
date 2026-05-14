@@ -1,8 +1,18 @@
 import { Link } from 'react-router-dom';
-import { Baby, Heart, Plus, RotateCcw, Trash2, UserRoundPlus } from 'lucide-react';
+import { Baby, Heart, Images, Mic, MicOff, Plus, RotateCcw, Trash2, UserRoundPlus } from 'lucide-react';
 import { useFamilyStore } from '../store/familyStore';
 import type { Gender, Person } from '../types/family';
-import { getAge, getChildren, getFullName, getImportantForPerson, getParents, getSpouses, getYears } from '../utils/family';
+import {
+  getAge,
+  getChildren,
+  getFullName,
+  getImportantForPerson,
+  getParents,
+  getSpouses,
+  getYears,
+} from '../utils/family';
+import { stageIcon, stagesForGender } from '../utils/lifeStages';
+import { useSpeechToText } from '../hooks/useSpeechToText';
 import { MediaUploader } from './Media/MediaUploader';
 
 function NumberField({
@@ -26,11 +36,21 @@ function NumberField({
   );
 }
 
-function TextField({ label, value, onChange }: { label: string; value?: string; onChange: (value: string) => void }) {
+function TextField({
+  label,
+  value,
+  onChange,
+  type = 'text',
+}: {
+  label: string;
+  value?: string;
+  onChange: (value: string) => void;
+  type?: 'text' | 'date';
+}) {
   return (
     <label>
       <span>{label}</span>
-      <input value={value ?? ''} onChange={(event) => onChange(event.target.value)} />
+      <input type={type} value={value ?? ''} onChange={(event) => onChange(event.target.value)} />
     </label>
   );
 }
@@ -49,31 +69,64 @@ export function PersonEditor() {
   const softDeletePerson = useFamilyStore((state) => state.softDeletePerson);
   const restorePerson = useFamilyStore((state) => state.restorePerson);
 
-  const important = selectedImportantPersonId ? snapshot.importantPeople[selectedImportantPersonId] : undefined;
+  const important = selectedImportantPersonId
+    ? snapshot.importantPeople[selectedImportantPersonId]
+    : undefined;
   const person = snapshot.people[selectedPersonId];
+
+  const bio = useSpeechToText({
+    lang: 'ru-RU',
+    onResult: (text) => {
+      if (!person) return;
+      const next = (person.bio ?? '').trim();
+      updatePerson(person.id, { bio: next ? next + ' ' + text : text });
+    },
+  });
 
   if (important) {
     return (
       <aside className="inspector">
         <div className="inspector-header">
-          <div className="avatar">{important.firstName[0]}{important.lastName[0]}</div>
+          <div className="avatar">
+            {important.firstName[0]}
+            {important.lastName[0]}
+          </div>
           <div>
             <strong>{getFullName(important)}</strong>
             <span>{important.relationshipType}</span>
           </div>
         </div>
         <div className="form-grid">
-          <TextField label="Имя" value={important.firstName} onChange={(firstName) => updateImportantPerson(important.id, { firstName })} />
-          <TextField label="Фамилия" value={important.lastName} onChange={(lastName) => updateImportantPerson(important.id, { lastName })} />
+          <TextField
+            label="Имя"
+            value={important.firstName}
+            onChange={(firstName) => updateImportantPerson(important.id, { firstName })}
+          />
+          <TextField
+            label="Фамилия"
+            value={important.lastName}
+            onChange={(lastName) => updateImportantPerson(important.id, { lastName })}
+          />
           <TextField
             label="Тип связи"
             value={important.relationshipType}
-            onChange={(relationshipType) => updateImportantPerson(important.id, { relationshipType })}
+            onChange={(relationshipType) =>
+              updateImportantPerson(important.id, { relationshipType })
+            }
           />
-          <NumberField label="Год рождения" value={important.birthYear} onChange={(birthYear) => updateImportantPerson(important.id, { birthYear })} />
+          <NumberField
+            label="Год рождения"
+            value={important.birthYear}
+            onChange={(birthYear) => updateImportantPerson(important.id, { birthYear })}
+          />
           <label className="wide-label">
             <span>Почему важен</span>
-            <textarea value={important.importance} onChange={(event) => updateImportantPerson(important.id, { importance: event.target.value })} />
+            <textarea
+              value={important.importance}
+              onChange={(event) =>
+                updateImportantPerson(important.id, { importance: event.target.value })
+              }
+            />
           </label>
         </div>
         <Link className="primary-action" to={`/important-person/${important.id}`}>
@@ -89,17 +142,36 @@ export function PersonEditor() {
   const spouses = getSpouses(snapshot, person.id);
   const children = getChildren(snapshot, person.id);
   const importantPeople = getImportantForPerson(snapshot, person.id);
-  const couples = Object.values(snapshot.couples).filter((couple) => couple.partnerAId === person.id || couple.partnerBId === person.id);
+  const couples = Object.values(snapshot.couples).filter(
+    (couple) => couple.partnerAId === person.id || couple.partnerBId === person.id,
+  );
 
   const patch = (changes: Partial<Person>) => updatePerson(person.id, changes);
+
+  // When user picks a full date, also keep birthYear in sync for legacy displays.
+  const handleBirthDate = (value: string) => {
+    const year = /^(\d{4})/.exec(value)?.[1];
+    patch({
+      birthDate: value || undefined,
+      birthYear: year ? Number(year) : person.birthYear,
+    });
+  };
+
+  const stages = stagesForGender(person.gender);
 
   return (
     <aside className="inspector">
       <div className="inspector-header">
-        <div className="avatar large-avatar">{person.firstName[0]}{person.lastName[0]}</div>
+        <div className="avatar large-avatar">
+          {person.firstName[0]}
+          {person.lastName[0]}
+        </div>
         <div>
           <strong>{getFullName(person)}</strong>
-          <span>{getYears(person)}{getAge(person) ? ` · ${getAge(person)} лет` : ''}</span>
+          <span>
+            {getYears(person)}
+            {getAge(person) ? ` · ${getAge(person)} лет` : ''}
+          </span>
         </div>
       </div>
 
@@ -107,20 +179,57 @@ export function PersonEditor() {
         <Link className="primary-action" to={`/person/${person.id}`}>
           Открыть профиль
         </Link>
-        <button type="button" onClick={() => addLifeEvent({ ownerType: 'person', ownerId: person.id })}>
+        <Link className="primary-action" to={`/person/${person.id}/gallery`}>
+          <Images size={15} />
+          Галерея по вехам
+        </Link>
+        <button
+          type="button"
+          onClick={() => addLifeEvent({ ownerType: 'person', ownerId: person.id })}
+          title="Создать обычное событие без привязки к вехе"
+        >
           <Plus size={15} />
           Событие
         </button>
       </div>
 
+      <section className="inspector-stages">
+        <small>Добавить веху жизни</small>
+        <div className="stage-chip-row">
+          {stages.map((stage) => (
+            <button
+              key={stage.key}
+              type="button"
+              title={stage.description}
+              onClick={() =>
+                addLifeEvent(
+                  { ownerType: 'person', ownerId: person.id },
+                  { type: stage.defaultEventType, title: stage.title },
+                )
+              }
+            >
+              <span aria-hidden>{stageIcon(stage.key)}</span> {stage.title}
+            </button>
+          ))}
+        </div>
+      </section>
+
       <div className="form-grid">
-        <TextField label="Имя" value={person.firstName} onChange={(firstName) => patch({ firstName })} />
+        <TextField
+          label="Имя"
+          value={person.firstName}
+          onChange={(firstName) => patch({ firstName })}
+        />
         <TextField
           label="Отчество"
           value={person.patronymic}
           onChange={(patronymic) => patch({ patronymic: patronymic || undefined })}
         />
-        <TextField label="Фамилия" value={person.lastName} onChange={(lastName) => patch({ lastName })} />
+        <TextField
+          label="Фамилия"
+          value={person.lastName}
+          onChange={(lastName) => patch({ lastName })}
+        />
         {person.gender === 'female' && (
           <TextField
             label="Девичья фамилия"
@@ -130,16 +239,49 @@ export function PersonEditor() {
         )}
         <label>
           <span>Пол</span>
-          <select value={person.gender} onChange={(event) => patch({ gender: event.target.value as Gender })}>
+          <select
+            value={person.gender}
+            onChange={(event) => patch({ gender: event.target.value as Gender })}
+          >
             <option value="male">Мужской</option>
             <option value="female">Женский</option>
           </select>
         </label>
-        <NumberField label="Год рождения" value={person.birthYear} onChange={(birthYear) => patch({ birthYear })} />
-        <NumberField label="Год смерти" value={person.deathYear} onChange={(deathYear) => patch({ deathYear })} />
+        <NumberField
+          label="Год рождения"
+          value={person.birthYear}
+          onChange={(birthYear) => patch({ birthYear })}
+        />
+        <TextField
+          label="Дата рождения (полная)"
+          type="date"
+          value={person.birthDate}
+          onChange={handleBirthDate}
+        />
+        <NumberField
+          label="Год смерти"
+          value={person.deathYear}
+          onChange={(deathYear) => patch({ deathYear })}
+        />
         <label className="wide-label">
-          <span>Биография</span>
-          <textarea value={person.bio ?? ''} onChange={(event) => patch({ bio: event.target.value })} />
+          <span>
+            Биография
+            {bio.supported && (
+              <button
+                type="button"
+                className={`mic-toggle${bio.isRecording ? ' mic-active' : ''}`}
+                onClick={() => (bio.isRecording ? bio.stop() : bio.start())}
+                title={bio.isRecording ? 'Остановить запись' : 'Надиктовать голосом (ru-RU)'}
+              >
+                {bio.isRecording ? <MicOff size={12} /> : <Mic size={12} />}
+                {bio.isRecording ? 'Слушаю…' : 'Голос'}
+              </button>
+            )}
+          </span>
+          <textarea
+            value={person.bio ?? ''}
+            onChange={(event) => patch({ bio: event.target.value })}
+          />
         </label>
       </div>
 
@@ -172,7 +314,11 @@ export function PersonEditor() {
             Восстановить
           </button>
         ) : (
-          <button type="button" className="danger-action" onClick={() => softDeletePerson(person.id)}>
+          <button
+            type="button"
+            className="danger-action"
+            onClick={() => softDeletePerson(person.id)}
+          >
             <Trash2 size={15} />
             Soft delete
           </button>
@@ -214,4 +360,3 @@ function RelationGroup({ title, people }: { title: string; people: Person[] }) {
     </div>
   );
 }
-

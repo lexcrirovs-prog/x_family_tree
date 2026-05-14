@@ -12,7 +12,9 @@ export type Person = {
   maidenName?: string;
   gender: Gender;
   birthYear?: number;
+  birthDate?: string;
   deathYear?: number;
+  deathDate?: string;
   bio?: string;
   photoIds: string[];
   videoIds: string[];
@@ -85,6 +87,7 @@ export type LifeEventType =
   | 'death'
   | 'education'
   | 'work'
+  | 'military'
   | 'retirement'
   | 'move'
   | 'achievement'
@@ -102,6 +105,7 @@ export type LifeEvent = {
   date?: string;
   location?: string;
   description?: string;
+  link?: string;
   photoIds: string[];
   videoIds: string[];
   audioIds: string[];
