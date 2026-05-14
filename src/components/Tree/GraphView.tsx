@@ -18,6 +18,7 @@ import {
   activeImportantPeople,
   activePeople,
   getFullName,
+  hasResolvedParents,
   personMatchesSurname,
 } from '../../utils/family';
 import { usePanInertia } from '../../hooks/usePanInertia';
@@ -66,6 +67,7 @@ function GraphViewInner() {
   rfRef.current = reactFlowApi;
   const inertia = usePanInertia(() => rfRef.current);
   const [menu, setMenu] = useState<ContextMenuState | undefined>();
+  const [isDragging, setIsDragging] = useState(false);
 
   const surnameActive = Boolean(surnameFilter) && surnameFilterMode !== 'off';
   const filterFn = useCallback(
@@ -244,7 +246,7 @@ function GraphViewInner() {
 
   return (
     <div
-      className="tree-surface graph-surface"
+      className={`tree-surface graph-surface${isDragging ? ' is-dragging' : ''}`}
       onClick={(e) => {
         if (menu) closeMenu();
         // don't stop propagation — ReactFlow needs its own clicks
@@ -265,7 +267,9 @@ function GraphViewInner() {
         onNodeMouseEnter={handleEnter}
         onNodeMouseLeave={handleLeave}
         onNodeContextMenu={handleContextMenu}
+        onNodeDragStart={() => setIsDragging(true)}
         onNodeDragStop={(_, node) => {
+          setIsDragging(false);
           if (people[node.id]) {
             setPersonPosition(node.id, node.position.x, node.position.y);
           } else if (importantPeople[node.id]) {
@@ -309,7 +313,16 @@ function GraphViewInner() {
               >
                 Открыть профиль
               </button>
-              {!people[menu.nodeId].parentCoupleId && (
+              {!hasResolvedParents(
+                {
+                  people,
+                  couples,
+                  importantPeople,
+                  events,
+                  media,
+                },
+                menu.nodeId,
+              ) && (
                 <button
                   type="button"
                   onClick={() => {

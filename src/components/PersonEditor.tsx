@@ -11,6 +11,7 @@ import {
   getParents,
   getSpouses,
   getYears,
+  hasResolvedParents,
 } from '../utils/family';
 import { stageIcon, stagesForGender } from '../utils/lifeStages';
 import { useSpeechToText } from '../hooks/useSpeechToText';
@@ -216,120 +217,6 @@ export function PersonEditor() {
         </button>
       </div>
 
-      <section className="inspector-stages">
-        <small>+ Важный человек (с готовой ролью)</small>
-        <div className="stage-chip-row">
-          {IMPORTANT_RELATIONS.map((rel) => (
-            <button
-              key={rel.key}
-              type="button"
-              title={`Добавить ${rel.label.toLowerCase()} (запись в «Важных людях»)`}
-              onClick={() =>
-                addImportantPerson(
-                  { type: 'person', id: person.id },
-                  {
-                    firstName: rel.label,
-                    lastName: person.lastName,
-                    relationshipType: rel.key,
-                    importance: `${rel.label} ${getFullName(person)}.`,
-                  },
-                )
-              }
-            >
-              <span aria-hidden>{rel.icon}</span> {rel.label}
-            </button>
-          ))}
-        </div>
-      </section>
-
-      {couples.length > 0 && (
-        <section className="inspector-stages">
-          <small>Супруги (связи)</small>
-          <ul className="couples-list">
-            {couples.map((couple) => {
-              const otherId =
-                couple.partnerAId === person.id ? couple.partnerBId : couple.partnerAId;
-              const other = snapshot.people[otherId];
-              return (
-                <li key={couple.id}>
-                  <span>
-                    ↔ <strong>{other ? getFullName(other) : '—'}</strong>
-                  </span>
-                  <button
-                    type="button"
-                    className="danger-action"
-                    onClick={() => {
-                      if (
-                        confirm(
-                          'Расторгнуть эту пару? Дети окажутся без привязки к родителям — это можно изменить позже.',
-                        )
-                      ) {
-                        unpairPartners(couple.id);
-                      }
-                    }}
-                    title="Расторгнуть пару"
-                  >
-                    Расторгнуть
-                  </button>
-                </li>
-              );
-            })}
-          </ul>
-        </section>
-      )}
-
-      <section className="inspector-stages">
-        <small>Связать существующих супругов</small>
-        <select
-          defaultValue=""
-          onChange={(event) => {
-            const partnerBId = event.target.value;
-            if (!partnerBId) return;
-            linkPartners(person.id, partnerBId);
-            event.target.value = '';
-          }}
-        >
-          <option value="">Выбрать супруга из дерева…</option>
-          {Object.values(snapshot.people)
-            .filter(
-              (p) =>
-                !p.isDeleted &&
-                p.id !== person.id &&
-                !couples.some(
-                  (c) =>
-                    (c.partnerAId === person.id && c.partnerBId === p.id) ||
-                    (c.partnerBId === person.id && c.partnerAId === p.id),
-                ),
-            )
-            .map((p) => (
-              <option key={p.id} value={p.id}>
-                {getFullName(p)}
-              </option>
-            ))}
-        </select>
-      </section>
-
-      <section className="inspector-stages">
-        <small>Добавить веху жизни</small>
-        <div className="stage-chip-row">
-          {stages.map((stage) => (
-            <button
-              key={stage.key}
-              type="button"
-              title={stage.description}
-              onClick={() =>
-                addLifeEvent(
-                  { ownerType: 'person', ownerId: person.id },
-                  { type: stage.defaultEventType, title: stage.title },
-                )
-              }
-            >
-              <span aria-hidden>{stageIcon(stage.key)}</span> {stage.title}
-            </button>
-          ))}
-        </div>
-      </section>
-
       <div className="form-grid">
         <TextField
           label="Имя"
@@ -402,7 +289,7 @@ export function PersonEditor() {
       </div>
 
       <div className="action-grid">
-        {!person.parentCoupleId && (
+        {!hasResolvedParents(snapshot, person.id) && (
           <button type="button" onClick={() => addParents(person.id)}>
             <UserRoundPlus size={15} />
             Добавить родителей
@@ -459,6 +346,123 @@ export function PersonEditor() {
       </section>
 
       <MediaUploader ownerId={person.id} />
+
+      <details className="inspector-spoiler">
+        <summary>Расширенные действия</summary>
+        <section className="inspector-stages">
+          <small>+ Важный человек (с готовой ролью)</small>
+          <div className="stage-chip-row">
+            {IMPORTANT_RELATIONS.map((rel) => (
+              <button
+                key={rel.key}
+                type="button"
+                title={`Добавить ${rel.label.toLowerCase()} (запись в «Важных людях»)`}
+                onClick={() =>
+                  addImportantPerson(
+                    { type: 'person', id: person.id },
+                    {
+                      firstName: rel.label,
+                      lastName: person.lastName,
+                      relationshipType: rel.key,
+                      importance: `${rel.label} ${getFullName(person)}.`,
+                    },
+                  )
+                }
+              >
+                <span aria-hidden>{rel.icon}</span> {rel.label}
+              </button>
+            ))}
+          </div>
+        </section>
+
+        {couples.length > 0 && (
+          <section className="inspector-stages">
+            <small>Супруги (связи)</small>
+            <ul className="couples-list">
+              {couples.map((couple) => {
+                const otherId =
+                  couple.partnerAId === person.id ? couple.partnerBId : couple.partnerAId;
+                const other = snapshot.people[otherId];
+                return (
+                  <li key={couple.id}>
+                    <span>
+                      ↔ <strong>{other ? getFullName(other) : '—'}</strong>
+                    </span>
+                    <button
+                      type="button"
+                      className="danger-action"
+                      onClick={() => {
+                        if (
+                          confirm(
+                            'Расторгнуть эту пару? Дети окажутся без привязки к родителям — это можно изменить позже.',
+                          )
+                        ) {
+                          unpairPartners(couple.id);
+                        }
+                      }}
+                      title="Расторгнуть пару"
+                    >
+                      Расторгнуть
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+          </section>
+        )}
+
+        <section className="inspector-stages">
+          <small>Связать существующих супругов</small>
+          <select
+            defaultValue=""
+            onChange={(event) => {
+              const partnerBId = event.target.value;
+              if (!partnerBId) return;
+              linkPartners(person.id, partnerBId);
+              event.target.value = '';
+            }}
+          >
+            <option value="">Выбрать супруга из дерева…</option>
+            {Object.values(snapshot.people)
+              .filter(
+                (p) =>
+                  !p.isDeleted &&
+                  p.id !== person.id &&
+                  !couples.some(
+                    (c) =>
+                      (c.partnerAId === person.id && c.partnerBId === p.id) ||
+                      (c.partnerBId === person.id && c.partnerAId === p.id),
+                  ),
+              )
+              .map((p) => (
+                <option key={p.id} value={p.id}>
+                  {getFullName(p)}
+                </option>
+              ))}
+          </select>
+        </section>
+
+        <section className="inspector-stages">
+          <small>Добавить веху жизни</small>
+          <div className="stage-chip-row">
+            {stages.map((stage) => (
+              <button
+                key={stage.key}
+                type="button"
+                title={stage.description}
+                onClick={() =>
+                  addLifeEvent(
+                    { ownerType: 'person', ownerId: person.id },
+                    { type: stage.defaultEventType, title: stage.title },
+                  )
+                }
+              >
+                <span aria-hidden>{stageIcon(stage.key)}</span> {stage.title}
+              </button>
+            ))}
+          </div>
+        </section>
+      </details>
     </aside>
   );
 }

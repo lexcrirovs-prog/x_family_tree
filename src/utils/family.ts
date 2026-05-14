@@ -44,6 +44,17 @@ export function personMatchesSurname(person: Person, surname: string): boolean {
   return person.lastName === surname || person.maidenName === surname;
 }
 
+/**
+ * True only when the person's parentCoupleId points to an existing couple.
+ * Guards against dangling references (e.g. data imported from seed where the
+ * couple was never created), so we still show "+ Родители" in the UI.
+ */
+export function hasResolvedParents(snapshot: FamilySnapshot, personId: string): boolean {
+  const person = snapshot.people[personId];
+  if (!person?.parentCoupleId) return false;
+  return Boolean(snapshot.couples[person.parentCoupleId]);
+}
+
 export const IMPORTANT_RELATIONS: ReadonlyArray<{ key: string; label: string; icon: string }> = [
   { key: 'отчим', label: 'Отчим', icon: '👨' },
   { key: 'мачеха', label: 'Мачеха', icon: '👩' },

@@ -188,7 +188,13 @@ export const useFamilyStore = create<FamilyStore>()(
   addParents: (childId) =>
     set((state) => {
       const child = state.people[childId];
-      if (!child || child.parentCoupleId) return {};
+      if (!child) return {};
+      // Reject only if parents already exist as a real couple; dangling IDs are
+      // treated as "no parents" so we can heal stale references.
+      const existingCouple = child.parentCoupleId
+        ? state.couples[child.parentCoupleId]
+        : undefined;
+      if (existingCouple) return {};
       const generation = child.generation - 1;
       const parentAId = createId('person');
       const parentBId = createId('person');

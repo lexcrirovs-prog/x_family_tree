@@ -5,7 +5,7 @@ import { Camera, Plus, Star } from 'lucide-react';
 import { indexedDBMediaAdapter } from '../../storage/IndexedDBAdapter';
 import { useFamilyStore } from '../../store/familyStore';
 import { useIsMuted } from '../../store/treeHoverStore';
-import { getFullName, getInitials, getYears } from '../../utils/family';
+import { getFullName, getInitials, getYears, hasResolvedParents } from '../../utils/family';
 import { kinshipLabel } from '../../utils/kinship';
 import { uploadPhotoForPerson } from '../../utils/uploadPhoto';
 
@@ -184,7 +184,10 @@ export const PersonNode = memo(function PersonNode({ data }: NodeProps<PersonNod
       {kinship && <div className="kinship-chip">{kinship}</div>}
       {isAnchor && <div className="kinship-chip kinship-chip-anchor">← якорь</div>}
       <div className="person-node-actions">
-        {!person.parentCoupleId && (
+        {!hasResolvedParents(
+          { people: allPeople, couples: allCouples, importantPeople: {}, events: {}, media: {} },
+          person.id,
+        ) && (
           <button
             type="button"
             onClick={(event) => {
