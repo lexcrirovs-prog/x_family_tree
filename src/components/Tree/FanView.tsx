@@ -3,7 +3,7 @@ import * as d3 from 'd3';
 import { useNavigate } from 'react-router-dom';
 import { useFamilyStore } from '../../store/familyStore';
 import type { Person } from '../../types/family';
-import { getFullName, getInitials, getYears } from '../../utils/family';
+import { getFullName, getInitials, getYears, personMatchesSurname } from '../../utils/family';
 
 type FanSlot = {
   person?: Person;
@@ -63,6 +63,9 @@ export function FanView() {
   const fanRootId = useFamilyStore((state) => state.fanRootId);
   const selectPerson = useFamilyStore((state) => state.selectPerson);
   const setFanRoot = useFamilyStore((state) => state.setFanRoot);
+  const surnameFilter = useFamilyStore((state) => state.surnameFilter);
+  const surnameFilterMode = useFamilyStore((state) => state.surnameFilterMode);
+  const surnameActive = Boolean(surnameFilter) && surnameFilterMode !== 'off';
   const navigate = useNavigate();
 
   const effectiveRootId = people[fanRootId] ? fanRootId : 'me';
@@ -134,10 +137,15 @@ export function FanView() {
             .map((slot) => {
               const position = textPosition(slot);
               const isSelected = slot.person?.id && slot.person.id === selectedPersonId;
+              const surnameMatches =
+                slot.person && surnameFilter
+                  ? personMatchesSurname(slot.person, surnameFilter)
+                  : true;
+              const filterMuted = surnameActive && !surnameMatches;
               return (
                 <g
                   key={`${slot.depth}-${slot.index}-${slot.person?.id ?? 'empty'}`}
-                  className={`fan-sector fan-${slot.branch}${isSelected ? ' fan-sector-selected' : ''}`}
+                  className={`fan-sector fan-${slot.branch}${isSelected ? ' fan-sector-selected' : ''}${filterMuted ? ' fan-sector-muted' : ''}`}
                   onClick={() => {
                     if (slot.person) selectPerson(slot.person.id);
                   }}

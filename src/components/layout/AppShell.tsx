@@ -1,6 +1,6 @@
 import { ChangeEvent } from 'react';
 import { Outlet } from 'react-router-dom';
-import { Download, Eye, EyeOff, Moon, RotateCcw, Sun, Type, Upload } from 'lucide-react';
+import { Download, Eye, EyeOff, Move, Moon, RotateCcw, Sun, Type, Undo2, Upload } from 'lucide-react';
 import { useFamilyStore } from '../../store/familyStore';
 import type { FamilySnapshot } from '../../types/family';
 import { downloadJson, readJsonFile } from '../../utils/download';
@@ -10,6 +10,9 @@ import { PdfExportButton } from '../PDFExport/FamilyPdf';
 import { NavigationHistory } from './NavigationHistory';
 import { useKeyboardMode } from '../../hooks/useKeyboardMode';
 import { BirthdayWidget } from '../Widgets/BirthdayWidget';
+import { SurnameFilter } from './SurnameFilter';
+import { TrashDrawer } from './TrashDrawer';
+import { undo } from '../../store/undoStack';
 
 const SCALE_LABEL: Record<string, string> = {
   normal: 'А',
@@ -33,6 +36,7 @@ export function AppShell() {
   const showImportantPeople = useFamilyStore((state) => state.showImportantPeople);
   const toggleImportantPeople = useFamilyStore((state) => state.toggleImportantPeople);
   const resetSeed = useFamilyStore((state) => state.resetSeed);
+  const resetAllPositions = useFamilyStore((state) => state.resetAllPositions);
   const importSnapshot = useFamilyStore((state) => state.importSnapshot);
   const people = useFamilyStore((state) => state.people);
   const couples = useFamilyStore((state) => state.couples);
@@ -65,7 +69,30 @@ export function AppShell() {
         <GlobalSearch />
         <ModeSwitcher value={mode} onChange={setMode} />
         <div className="toolbar-actions">
+          <SurnameFilter />
           <BirthdayWidget />
+          <button
+            type="button"
+            className="toolbar-button"
+            onClick={() => {
+              if (!undo()) return;
+            }}
+            title="Отменить последнее изменение (Ctrl+Z)"
+            aria-label="Отменить"
+          >
+            <Undo2 size={16} />
+          </button>
+          <button
+            type="button"
+            className="toolbar-button"
+            onClick={() => {
+              if (confirm('Сбросить раскладку узлов к автоматической?')) resetAllPositions();
+            }}
+            title="Вернуть автоматическую раскладку графа"
+            aria-label="Сбросить раскладку"
+          >
+            <Move size={16} />
+          </button>
           <button
             type="button"
             className="toolbar-button"
@@ -125,6 +152,7 @@ export function AppShell() {
         </div>
       </header>
       <Outlet />
+      <TrashDrawer />
     </div>
   );
 }

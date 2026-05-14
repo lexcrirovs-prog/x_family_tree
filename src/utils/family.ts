@@ -26,6 +26,24 @@ export function activePeople(snapshot: FamilySnapshot): Person[] {
   return Object.values(snapshot.people).filter((person) => !person.isDeleted);
 }
 
+export function activeImportantPeople(snapshot: FamilySnapshot): ImportantPerson[] {
+  return Object.values(snapshot.importantPeople).filter((p) => !p.isDeleted);
+}
+
+export function uniqueSurnames(snapshot: FamilySnapshot): string[] {
+  const set = new Set<string>();
+  for (const person of Object.values(snapshot.people)) {
+    if (person.isDeleted) continue;
+    if (person.lastName) set.add(person.lastName);
+    if (person.maidenName) set.add(person.maidenName);
+  }
+  return Array.from(set).sort((a, b) => a.localeCompare(b));
+}
+
+export function personMatchesSurname(person: Person, surname: string): boolean {
+  return person.lastName === surname || person.maidenName === surname;
+}
+
 export function findCoupleByPartners(couples: Record<string, Couple>, a: string, b: string): Couple | undefined {
   return Object.values(couples).find(
     (couple) =>

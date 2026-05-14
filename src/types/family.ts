@@ -23,6 +23,7 @@ export type Person = {
   parentCoupleId?: string;
   lifeEventIds: string[];
   isDeleted?: boolean;
+  customPosition?: { x: number; y: number };
   generation: number;
   branch?: 'paternal' | 'maternal' | 'self' | 'spouse';
 };
@@ -48,6 +49,8 @@ export type ImportantPerson = {
   relationshipType: string;
   photoIds: string[];
   videoIds: string[];
+  isDeleted?: boolean;
+  customPosition?: { x: number; y: number };
   linkedTo: Array<{
     type: 'person' | 'couple';
     id: string;

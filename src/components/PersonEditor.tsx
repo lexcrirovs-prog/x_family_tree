@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom';
-import { Baby, Heart, Images, Mic, MicOff, Plus, RotateCcw, Trash2, UserRoundPlus } from 'lucide-react';
+import { Baby, Heart, Images, Mic, MicOff, Plus, RotateCcw, Trash2, UserRoundPlus, X } from 'lucide-react';
 import { useFamilyStore } from '../store/familyStore';
 import type { Gender, Person } from '../types/family';
 import {
@@ -61,6 +61,8 @@ export function PersonEditor() {
   const selectedImportantPersonId = useFamilyStore((state) => state.selectedImportantPersonId);
   const updatePerson = useFamilyStore((state) => state.updatePerson);
   const updateImportantPerson = useFamilyStore((state) => state.updateImportantPerson);
+  const softDeleteImportant = useFamilyStore((state) => state.softDeleteImportantPerson);
+  const restoreImportant = useFamilyStore((state) => state.restoreImportantPerson);
   const addParents = useFamilyStore((state) => state.addParents);
   const addSpouse = useFamilyStore((state) => state.addSpouse);
   const addChild = useFamilyStore((state) => state.addChild);
@@ -129,9 +131,27 @@ export function PersonEditor() {
             />
           </label>
         </div>
-        <Link className="primary-action" to={`/important-person/${important.id}`}>
-          Открыть глубокий профиль
-        </Link>
+        <div className="action-grid">
+          <Link className="primary-action" to={`/important-person/${important.id}`}>
+            Открыть глубокий профиль
+          </Link>
+          {important.isDeleted ? (
+            <button type="button" onClick={() => restoreImportant(important.id)}>
+              <RotateCcw size={15} />
+              Восстановить
+            </button>
+          ) : (
+            <button
+              type="button"
+              className="danger-action"
+              onClick={() => softDeleteImportant(important.id)}
+              title="Удалить (восстановить можно из корзины слева внизу)"
+            >
+              <X size={15} />
+              Удалить
+            </button>
+          )}
+        </div>
       </aside>
     );
   }

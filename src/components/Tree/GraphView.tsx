@@ -11,7 +11,12 @@ import ReactFlow, {
 } from 'reactflow';
 import { useFamilyStore } from '../../store/familyStore';
 import { useTreeHoverStore } from '../../store/treeHoverStore';
-import { activePeople, getFullName } from '../../utils/family';
+import {
+  activeImportantPeople,
+  activePeople,
+  getFullName,
+  personMatchesSurname,
+} from '../../utils/family';
 import { PersonNode, type PersonNodeData } from './PersonNode';
 import { ImportantNode, type ImportantNodeData } from './ImportantNode';
 
@@ -30,10 +35,21 @@ export function GraphView() {
   const focusedPersonId = useFamilyStore((state) => state.focusedPersonId);
   const setFocusedPerson = useFamilyStore((state) => state.setFocusedPerson);
   const selectPerson = useFamilyStore((state) => state.selectPerson);
+  const setPersonPosition = useFamilyStore((state) => state.setPersonPosition);
+  const setImportantPosition = useFamilyStore((state) => state.setImportantPosition);
+  const surnameFilter = useFamilyStore((state) => state.surnameFilter);
+  const surnameFilterMode = useFamilyStore((state) => state.surnameFilterMode);
   const navigate = useNavigate();
   const setHover = useTreeHoverStore((s) => s.setHover);
   const hoveredId = useTreeHoverStore((s) => s.hoveredId);
   const relatedIds = useTreeHoverStore((s) => s.relatedIds);
+
+  const surnameActive = Boolean(surnameFilter) && surnameFilterMode !== 'off';
+  const filterFn = (matches: boolean): 'hide' | 'mute' | 'show' => {
+    if (!surnameActive) return 'show';
+    if (matches) return 'show';
+    return surnameFilterMode === 'only' ? 'hide' : 'mute';
+  };
 
   const nodes = useMemo(() => {
     const generationGap = 210;
@@ -41,6 +57,7 @@ export function GraphView() {
     const top = 80;
     const snapshot = { people, couples, importantPeople, events, media };
     const peopleList = activePeople(snapshot);
+    const importantsList = activeImportantPeople(snapshot);
     const generations = [...new Set(peopleList.map((p) => p.generation))].sort((a, b) => a - b);
     const list: Node<PersonNodeData | ImportantNodeData>[] = [];
 
@@ -53,43 +70,71 @@ export function GraphView() {
         });
       const startX = 120 - ((inGeneration.length - 1) * xGap) / 2;
       inGeneration.forEach((person, index) => {
+        const matches = surnameFilter ? personMatchesSurname(person, surnameFilter) : true;
+        const verdict = filterFn(matches);
+        if (verdict === 'hide') return;
+        const auto = {
+          x: startX + index * xGap + 720,
+          y: top + generationIndex * generationGap,
+        };
         list.push({
           id: person.id,
           type: 'person',
           data: {
             personId: person.id,
             focused: focusedPersonId === person.id,
+            filterMuted: verdict === 'mute',
           },
-          position: {
-            x: startX + index * xGap + 720,
-            y: top + generationIndex * generationGap,
-          },
+          position: person.customPosition ?? auto,
         });
       });
     });
 
     if (showImportantPeople) {
-      Object.values(importantPeople).forEach((important, index) => {
+      importantsList.forEach((important, index) => {
         const firstLink = important.linkedTo[0];
         const linkedPerson = firstLink?.type === 'person' ? people[firstLink.id] : undefined;
+        // Important persons match if linked person matches.
+        const matches = surnameFilter
+          ? linkedPerson
+            ? personMatchesSurname(linkedPerson, surnameFilter)
+            : false
+          : true;
+        const verdict = filterFn(matches);
+        if (verdict === 'hide') return;
         const y = linkedPerson
           ? top + generations.indexOf(linkedPerson.generation) * generationGap + 42
           : top + 120;
         list.push({
           id: important.id,
           type: 'important',
-          data: { importantId: important.id },
-          position: { x: 260 + index * 190, y },
+          data: { importantId: important.id, filterMuted: verdict === 'mute' },
+          position: important.customPosition ?? { x: 260 + index * 190, y },
         });
       });
     }
 
     return list;
-  }, [couples, events, focusedPersonId, importantPeople, media, people, showImportantPeople]);
+  }, [
+    couples,
+    events,
+    focusedPersonId,
+    importantPeople,
+    media,
+    people,
+    showImportantPeople,
+    surnameFilter,
+    surnameFilterMode,
+  ]);
 
   const edges = useMemo(() => {
     const list: Edge[] = [];
+    const isVisible = (id: string): boolean => nodes.some((n) => n.id === id);
+
     Object.values(couples).forEach((couple) => {
+      if (!isVisible(couple.partnerAId) || !isVisible(couple.partnerBId)) {
+        if (surnameFilterMode === 'only') return;
+      }
       list.push({
         id: `spouse-${couple.id}`,
         source: couple.partnerAId,
@@ -103,7 +148,9 @@ export function GraphView() {
         style: { strokeWidth: 1.8 },
       });
       couple.childrenIds.forEach((childId) => {
+        if (surnameFilterMode === 'only' && !isVisible(childId)) return;
         [couple.partnerAId, couple.partnerBId].forEach((parentId) => {
+          if (surnameFilterMode === 'only' && !isVisible(parentId)) return;
           list.push({
             id: `parent-${parentId}-${childId}`,
             source: parentId,
@@ -123,7 +170,10 @@ export function GraphView() {
 
     if (showImportantPeople) {
       Object.values(importantPeople).forEach((important) => {
+        if (important.isDeleted) return;
+        if (surnameFilterMode === 'only' && !isVisible(important.id)) return;
         important.linkedTo.forEach((link) => {
+          if (surnameFilterMode === 'only' && !isVisible(link.id)) return;
           list.push({
             id: `important-${important.id}-${link.id}`,
             source: important.id,
@@ -139,7 +189,7 @@ export function GraphView() {
       });
     }
     return list;
-  }, [couples, hoveredId, importantPeople, relatedIds, showImportantPeople]);
+  }, [couples, hoveredId, importantPeople, nodes, relatedIds, showImportantPeople, surnameFilterMode]);
 
   const handleEnter: NodeMouseHandler = (_, node) => {
     setHover(node.id, { people, couples, importantPeople, events, media });
@@ -161,6 +211,13 @@ export function GraphView() {
         }}
         onNodeMouseEnter={handleEnter}
         onNodeMouseLeave={handleLeave}
+        onNodeDragStop={(_, node) => {
+          if (people[node.id]) {
+            setPersonPosition(node.id, node.position.x, node.position.y);
+          } else if (importantPeople[node.id]) {
+            setImportantPosition(node.id, node.position.x, node.position.y);
+          }
+        }}
         onPaneClick={() => setFocusedPerson(undefined)}
         fitView
         minZoom={0.25}

@@ -10,6 +10,7 @@ import { getFullName, getInitials, getYears } from '../../utils/family';
 type PersonNodeData = {
   personId: string;
   focused?: boolean;
+  filterMuted?: boolean;
 };
 
 function AvatarThumb({
@@ -66,7 +67,7 @@ export const PersonNode = memo(function PersonNode({ data }: NodeProps<PersonNod
   const selectPerson = useFamilyStore((state) => state.selectPerson);
   const addParents = useFamilyStore((state) => state.addParents);
   const addImportantPerson = useFamilyStore((state) => state.addImportantPerson);
-  const muted = useIsMuted(data.personId);
+  const muted = useIsMuted(data.personId) || data.filterMuted;
   const ref = useRef<HTMLDivElement | null>(null);
   const navigate = useNavigate();
 

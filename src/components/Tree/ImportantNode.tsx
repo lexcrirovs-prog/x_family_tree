@@ -1,18 +1,21 @@
 import { memo } from 'react';
 import { Handle, Position, type NodeProps } from 'reactflow';
 import { Link } from 'react-router-dom';
+import { Trash2 } from 'lucide-react';
 import { useFamilyStore } from '../../store/familyStore';
 import { useIsMuted } from '../../store/treeHoverStore';
 import { getInitials } from '../../utils/family';
 
 type ImportantNodeData = {
   importantId: string;
+  filterMuted?: boolean;
 };
 
 export const ImportantNode = memo(function ImportantNode({ data }: NodeProps<ImportantNodeData>) {
   const important = useFamilyStore((state) => state.importantPeople[data.importantId]);
   const selectImportantPerson = useFamilyStore((state) => state.selectImportantPerson);
-  const muted = useIsMuted(data.importantId);
+  const softDelete = useFamilyStore((state) => state.softDeleteImportantPerson);
+  const muted = useIsMuted(data.importantId) || data.filterMuted;
 
   if (!important) return null;
 
@@ -27,9 +30,26 @@ export const ImportantNode = memo(function ImportantNode({ data }: NodeProps<Imp
         {important.firstName} {important.lastName}
       </strong>
       <span>{important.relationshipType}</span>
-      <Link to={`/important-person/${important.id}`} onClick={(event) => event.stopPropagation()}>
-        Профиль
-      </Link>
+      <div className="important-actions">
+        <Link
+          to={`/important-person/${important.id}`}
+          onClick={(event) => event.stopPropagation()}
+        >
+          Профиль
+        </Link>
+        <button
+          type="button"
+          className="important-delete"
+          onClick={(event) => {
+            event.stopPropagation();
+            softDelete(important.id);
+          }}
+          aria-label={`Удалить важного человека ${important.firstName} ${important.lastName}`}
+          title="Удалить (восстановить можно из корзины)"
+        >
+          <Trash2 size={12} />
+        </button>
+      </div>
       <Handle type="source" position={Position.Bottom} className="node-handle" />
     </div>
   );

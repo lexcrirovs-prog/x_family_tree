@@ -1,7 +1,9 @@
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { ArrowLeft, FileDown, Images, Pencil, Plus, Star, TreePine } from 'lucide-react';
+import { ArrowLeft, FileDown, Images, Mic, MicOff, Pencil, Plus, Star, TreePine } from 'lucide-react';
 import { useFamilyStore } from '../../store/familyStore';
-import { getEventsForPerson, getFullName, getYears } from '../../utils/family';
+import type { Gender } from '../../types/family';
+import { getEventsForPerson, getFullName } from '../../utils/family';
+import { useSpeechToText } from '../../hooks/useSpeechToText';
 import { Breadcrumbs } from '../layout/Breadcrumbs';
 import { LifeTimeline } from './LifeTimeline';
 import { RelationsBlock } from './RelationsBlock';
@@ -33,6 +35,21 @@ export function PersonProfile() {
 
   const events = getEventsForPerson(snapshot, person.id);
   const photoItems = person.photoIds.map((mediaId) => snapshot.media[mediaId]).filter(Boolean);
+  const bio = useSpeechToText({
+    lang: 'ru-RU',
+    onResult: (text) => {
+      const next = (person.bio ?? '').trim();
+      updatePerson(person.id, { bio: next ? next + ' ' + text : text });
+    },
+  });
+
+  const handleBirthDate = (value: string) => {
+    const year = /^(\d{4})/.exec(value)?.[1];
+    updatePerson(person.id, {
+      birthDate: value || undefined,
+      birthYear: year ? Number(year) : person.birthYear,
+    });
+  };
 
   return (
     <main className="profile-page">
@@ -41,16 +58,107 @@ export function PersonProfile() {
         <button type="button" className="icon-link" onClick={() => navigate(-1)} title="Назад">
           <ArrowLeft size={18} />
         </button>
-        <div className="profile-avatar">{person.firstName[0]}{person.lastName[0]}</div>
-        <div>
-          <h1>{getFullName(person)}</h1>
-          <p>
-            {person.gender === 'female' && person.maidenName
-              ? `урожд. ${person.maidenName} · `
-              : ''}
-            {getYears(person)}
-          </p>
-          {person.bio && <span>{person.bio}</span>}
+        <div className="profile-avatar">
+          {person.firstName[0]}
+          {person.lastName[0]}
+        </div>
+        <div className="profile-edit">
+          <div className="profile-name-edit">
+            <input
+              value={person.firstName}
+              onChange={(e) => updatePerson(person.id, { firstName: e.target.value })}
+              placeholder="Имя"
+              aria-label="Имя"
+            />
+            <input
+              value={person.patronymic ?? ''}
+              onChange={(e) =>
+                updatePerson(person.id, { patronymic: e.target.value || undefined })
+              }
+              placeholder="Отчество"
+              aria-label="Отчество"
+            />
+            <input
+              value={person.lastName}
+              onChange={(e) => updatePerson(person.id, { lastName: e.target.value })}
+              placeholder="Фамилия"
+              aria-label="Фамилия"
+            />
+          </div>
+          <div className="profile-meta-edit">
+            <label>
+              <span>Пол</span>
+              <select
+                value={person.gender}
+                onChange={(e) => updatePerson(person.id, { gender: e.target.value as Gender })}
+              >
+                <option value="male">Мужской</option>
+                <option value="female">Женский</option>
+              </select>
+            </label>
+            {person.gender === 'female' && (
+              <label>
+                <span>Девичья фамилия</span>
+                <input
+                  value={person.maidenName ?? ''}
+                  onChange={(e) =>
+                    updatePerson(person.id, { maidenName: e.target.value || undefined })
+                  }
+                />
+              </label>
+            )}
+            <label>
+              <span>Год рожд.</span>
+              <input
+                type="number"
+                value={person.birthYear ?? ''}
+                onChange={(e) =>
+                  updatePerson(person.id, {
+                    birthYear: e.target.value ? Number(e.target.value) : undefined,
+                  })
+                }
+              />
+            </label>
+            <label>
+              <span>Дата рожд.</span>
+              <input
+                type="date"
+                value={person.birthDate ?? ''}
+                onChange={(e) => handleBirthDate(e.target.value)}
+              />
+            </label>
+            <label>
+              <span>Год смерти</span>
+              <input
+                type="number"
+                value={person.deathYear ?? ''}
+                onChange={(e) =>
+                  updatePerson(person.id, {
+                    deathYear: e.target.value ? Number(e.target.value) : undefined,
+                  })
+                }
+              />
+            </label>
+          </div>
+          <div className="profile-bio-edit">
+            <textarea
+              value={person.bio ?? ''}
+              placeholder="Биография: коротко о человеке…"
+              onChange={(e) => updatePerson(person.id, { bio: e.target.value || undefined })}
+            />
+            {bio.supported && (
+              <button
+                type="button"
+                className={`mic-toggle${bio.isRecording ? ' mic-active' : ''}`}
+                onClick={() => (bio.isRecording ? bio.stop() : bio.start())}
+                title={bio.isRecording ? 'Остановить запись' : 'Надиктовать голосом'}
+                aria-label="Голосовой ввод"
+              >
+                {bio.isRecording ? <MicOff size={12} /> : <Mic size={12} />}
+                {bio.isRecording ? 'Слушаю…' : 'Голос'}
+              </button>
+            )}
+          </div>
         </div>
         <div className="profile-actions">
           <button type="button" onClick={() => navigate(`/person/${person.id}/gallery`)}>

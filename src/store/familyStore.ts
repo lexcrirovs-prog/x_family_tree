@@ -16,6 +16,7 @@ import { createId } from '../utils/ids';
 
 export type TreeRole = 'owner' | 'editor' | 'viewer';
 export type UiScale = 'normal' | 'large' | 'huge';
+export type SurnameFilterMode = 'off' | 'highlight' | 'only';
 
 type FamilyStore = FamilySnapshot & {
   treeId?: string;
@@ -28,6 +29,8 @@ type FamilyStore = FamilySnapshot & {
   focusedPersonId?: string;
   fanRootId: string;
   showImportantPeople: boolean;
+  surnameFilter?: string;
+  surnameFilterMode: SurnameFilterMode;
   recentPersonIds: string[];
   changeLog: ChangeLogEntry[];
   hydrated: boolean;
@@ -74,6 +77,17 @@ type FamilyStore = FamilySnapshot & {
   removeMediaItem: (id: string) => void;
   softDeletePerson: (id: string) => void;
   restorePerson: (id: string) => void;
+  softDeleteImportantPerson: (id: string) => void;
+  restoreImportantPerson: (id: string) => void;
+  permanentlyDeletePerson: (id: string) => void;
+  permanentlyDeleteImportantPerson: (id: string) => void;
+  emptyTrash: () => void;
+  setPersonPosition: (id: string, x: number, y: number) => void;
+  setImportantPosition: (id: string, x: number, y: number) => void;
+  resetAllPositions: () => void;
+  setSurnameFilter: (surname: string | undefined) => void;
+  setSurnameFilterMode: (mode: SurnameFilterMode) => void;
+  clearSurnameFilter: () => void;
   importSnapshot: (snapshot: FamilySnapshot) => void;
   resetSeed: () => void;
   snapshot: () => FamilySnapshot;
@@ -102,6 +116,8 @@ export const useFamilyStore = create<FamilyStore>()(
   focusedPersonId: undefined,
   fanRootId: 'me',
   showImportantPeople: true,
+  surnameFilter: undefined,
+  surnameFilterMode: 'off' as SurnameFilterMode,
   recentPersonIds: ['me'],
   changeLog: [],
   hydrated: false,
@@ -450,6 +466,146 @@ export const useFamilyStore = create<FamilyStore>()(
       people: { ...state.people, [id]: { ...state.people[id], isDeleted: false } },
       ...withLog(state, `Восстановлен профиль: ${state.people[id]?.firstName ?? id}`),
     })),
+  softDeleteImportantPerson: (id) =>
+    set((state) => ({
+      importantPeople: {
+        ...state.importantPeople,
+        [id]: { ...state.importantPeople[id], isDeleted: true },
+      },
+      ...withLog(state, `Удалён важный человек: ${state.importantPeople[id]?.firstName ?? id}`),
+    })),
+  restoreImportantPerson: (id) =>
+    set((state) => ({
+      importantPeople: {
+        ...state.importantPeople,
+        [id]: { ...state.importantPeople[id], isDeleted: false },
+      },
+      ...withLog(
+        state,
+        `Восстановлен важный человек: ${state.importantPeople[id]?.firstName ?? id}`,
+      ),
+    })),
+  permanentlyDeletePerson: (id) =>
+    set((state) => {
+      const person = state.people[id];
+      if (!person) return {};
+      const people = { ...state.people };
+      delete people[id];
+      // Clean references in couples (remove couples where person was a partner; orphan children to no couple).
+      const couples = { ...state.couples };
+      for (const couple of Object.values(couples)) {
+        if (couple.partnerAId === id || couple.partnerBId === id) {
+          for (const childId of couple.childrenIds) {
+            if (people[childId]) {
+              people[childId] = { ...people[childId], parentCoupleId: undefined };
+            }
+          }
+          delete couples[couple.id];
+        } else if (couple.childrenIds.includes(id)) {
+          couples[couple.id] = {
+            ...couple,
+            childrenIds: couple.childrenIds.filter((cid) => cid !== id),
+          };
+        }
+      }
+      return {
+        people,
+        couples,
+        ...withLog(state, `Окончательно удалён: ${person.firstName ?? id}`),
+      };
+    }),
+  permanentlyDeleteImportantPerson: (id) =>
+    set((state) => {
+      const importantPeople = { ...state.importantPeople };
+      const target = importantPeople[id];
+      if (!target) return {};
+      delete importantPeople[id];
+      return {
+        importantPeople,
+        ...withLog(state, `Окончательно удалён важный: ${target.firstName ?? id}`),
+      };
+    }),
+  emptyTrash: () =>
+    set((state) => {
+      const peopleEntries = Object.values(state.people).filter((p) => p.isDeleted);
+      const importantEntries = Object.values(state.importantPeople).filter((p) => p.isDeleted);
+      // Apply each permanent delete sequentially via the store actions
+      // (we can't recurse set; do it inline)
+      let nextPeople = { ...state.people };
+      let nextCouples = { ...state.couples };
+      for (const person of peopleEntries) {
+        delete nextPeople[person.id];
+        for (const couple of Object.values(nextCouples)) {
+          if (couple.partnerAId === person.id || couple.partnerBId === person.id) {
+            for (const childId of couple.childrenIds) {
+              if (nextPeople[childId]) {
+                nextPeople[childId] = { ...nextPeople[childId], parentCoupleId: undefined };
+              }
+            }
+            delete nextCouples[couple.id];
+          } else if (couple.childrenIds.includes(person.id)) {
+            nextCouples[couple.id] = {
+              ...couple,
+              childrenIds: couple.childrenIds.filter((cid) => cid !== person.id),
+            };
+          }
+        }
+      }
+      const nextImportant = { ...state.importantPeople };
+      for (const item of importantEntries) {
+        delete nextImportant[item.id];
+      }
+      return {
+        people: nextPeople,
+        couples: nextCouples,
+        importantPeople: nextImportant,
+        ...withLog(
+          state,
+          `Корзина очищена (людей: ${peopleEntries.length}, важных: ${importantEntries.length})`,
+        ),
+      };
+    }),
+  setPersonPosition: (id, x, y) =>
+    set((state) => {
+      const person = state.people[id];
+      if (!person) return {};
+      return {
+        people: { ...state.people, [id]: { ...person, customPosition: { x, y } } },
+      };
+    }),
+  setImportantPosition: (id, x, y) =>
+    set((state) => {
+      const item = state.importantPeople[id];
+      if (!item) return {};
+      return {
+        importantPeople: {
+          ...state.importantPeople,
+          [id]: { ...item, customPosition: { x, y } },
+        },
+      };
+    }),
+  resetAllPositions: () =>
+    set((state) => {
+      const people: typeof state.people = {};
+      for (const [id, p] of Object.entries(state.people)) {
+        const { customPosition: _drop, ...rest } = p;
+        people[id] = rest;
+      }
+      const importantPeople: typeof state.importantPeople = {};
+      for (const [id, p] of Object.entries(state.importantPeople)) {
+        const { customPosition: _drop, ...rest } = p;
+        importantPeople[id] = rest;
+      }
+      return { people, importantPeople, ...withLog(state, 'Сброшена раскладка узлов') };
+    }),
+  setSurnameFilter: (surname) =>
+    set((state) => ({
+      surnameFilter: surname,
+      surnameFilterMode:
+        state.surnameFilterMode === 'off' && surname ? 'highlight' : state.surnameFilterMode,
+    })),
+  setSurnameFilterMode: (mode) => set({ surnameFilterMode: mode }),
+  clearSurnameFilter: () => set({ surnameFilter: undefined, surnameFilterMode: 'off' }),
   importSnapshot: (snapshot) =>
     set((state) => ({
       ...snapshot,
@@ -484,6 +640,8 @@ export const useFamilyStore = create<FamilyStore>()(
         selectedPersonId: state.selectedPersonId,
         fanRootId: state.fanRootId,
         showImportantPeople: state.showImportantPeople,
+        surnameFilter: state.surnameFilter,
+        surnameFilterMode: state.surnameFilterMode,
         recentPersonIds: state.recentPersonIds,
         changeLog: state.changeLog,
       }),
