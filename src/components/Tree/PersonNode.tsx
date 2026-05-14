@@ -1,15 +1,64 @@
-import { memo, useRef } from 'react';
+import { memo, useEffect, useRef, useState } from 'react';
 import { Handle, Position, type NodeProps } from 'reactflow';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { Plus, Star } from 'lucide-react';
+import { indexedDBMediaAdapter } from '../../storage/IndexedDBAdapter';
 import { useFamilyStore } from '../../store/familyStore';
 import { useIsMuted } from '../../store/treeHoverStore';
-import { getInitials, getYears } from '../../utils/family';
+import { getFullName, getInitials, getYears } from '../../utils/family';
 
 type PersonNodeData = {
   personId: string;
   focused?: boolean;
 };
+
+function AvatarThumb({
+  personId,
+  initials,
+  onOpenGallery,
+}: {
+  personId: string;
+  initials: string;
+  onOpenGallery: () => void;
+}) {
+  const photoId = useFamilyStore(
+    (state) =>
+      state.people[personId]?.primaryPhotoId ?? state.people[personId]?.photoIds?.[0],
+  );
+  const [url, setUrl] = useState<string | undefined>();
+
+  useEffect(() => {
+    if (!photoId) {
+      setUrl(undefined);
+      return;
+    }
+    let objectUrl: string | undefined;
+    let cancelled = false;
+    indexedDBMediaAdapter.getBlob(photoId).then((stored) => {
+      if (cancelled || !stored) return;
+      objectUrl = URL.createObjectURL(stored.blob);
+      setUrl(objectUrl);
+    });
+    return () => {
+      cancelled = true;
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    };
+  }, [photoId]);
+
+  return (
+    <button
+      type="button"
+      className="avatar avatar-button"
+      onClick={(event) => {
+        event.stopPropagation();
+        onOpenGallery();
+      }}
+      title="Открыть галерею по вехам жизни"
+    >
+      {url ? <img src={url} alt={initials} /> : <span>{initials}</span>}
+    </button>
+  );
+}
 
 export const PersonNode = memo(function PersonNode({ data }: NodeProps<PersonNodeData>) {
   const person = useFamilyStore((state) => state.people[data.personId]);
@@ -19,6 +68,7 @@ export const PersonNode = memo(function PersonNode({ data }: NodeProps<PersonNod
   const addImportantPerson = useFamilyStore((state) => state.addImportantPerson);
   const muted = useIsMuted(data.personId);
   const ref = useRef<HTMLDivElement | null>(null);
+  const navigate = useNavigate();
 
   if (!person) return null;
 
@@ -56,11 +106,13 @@ export const PersonNode = memo(function PersonNode({ data }: NodeProps<PersonNod
     >
       <Handle type="target" position={Position.Top} className="node-handle" />
       <div className="person-node-top">
-        <div className="avatar">{getInitials(person)}</div>
+        <AvatarThumb
+          personId={person.id}
+          initials={getInitials(person)}
+          onOpenGallery={() => navigate(`/person/${person.id}/gallery`)}
+        />
         <div className="person-node-copy">
-          <strong>
-            {person.firstName} {person.lastName}
-          </strong>
+          <strong>{getFullName(person)}</strong>
           <span>{getYears(person)}</span>
         </div>
       </div>

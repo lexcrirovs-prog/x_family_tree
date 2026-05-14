@@ -48,6 +48,18 @@ type FamilyStore = FamilySnapshot & {
     owner: { ownerType: LifeEvent['ownerType']; ownerId: string },
     seed?: Partial<LifeEvent>,
   ) => void;
+  updateLifeEvent: (id: string, patch: Partial<LifeEvent>) => void;
+  removeLifeEvent: (id: string) => void;
+  attachMediaToEvent: (
+    eventId: string,
+    mediaId: string,
+    kind: 'photo' | 'video' | 'audio',
+  ) => void;
+  detachMediaFromEvent: (
+    eventId: string,
+    mediaId: string,
+    kind: 'photo' | 'video' | 'audio',
+  ) => void;
   addMediaItem: (media: MediaItem) => void;
   attachMediaToPerson: (personId: string, mediaId: string, kind: 'photo' | 'video' | 'audio') => void;
   detachMediaFromPerson: (
@@ -280,6 +292,7 @@ export const useFamilyStore = create<FamilyStore>()(
         description: seed?.description,
         photoIds: [],
         videoIds: [],
+        audioIds: [],
         linkedEntities: seed?.linkedEntities ?? [],
       };
 
@@ -303,6 +316,68 @@ export const useFamilyStore = create<FamilyStore>()(
         couples,
         events: { ...state.events, [id]: event },
         ...withLog(state, `Добавлено событие: ${event.title}`),
+      };
+    }),
+  updateLifeEvent: (id, patch) =>
+    set((state) => {
+      if (!state.events[id]) return {};
+      return {
+        events: { ...state.events, [id]: { ...state.events[id], ...patch } },
+        ...withLog(state, `Обновлено событие: ${state.events[id].title}`),
+      };
+    }),
+  removeLifeEvent: (id) =>
+    set((state) => {
+      const event = state.events[id];
+      if (!event) return {};
+      const events = { ...state.events };
+      delete events[id];
+      const people = { ...state.people };
+      const couples = { ...state.couples };
+      if (event.ownerType === 'person' && people[event.ownerId]) {
+        people[event.ownerId] = {
+          ...people[event.ownerId],
+          lifeEventIds: people[event.ownerId].lifeEventIds.filter((x) => x !== id),
+        };
+      }
+      if (event.ownerType === 'couple' && couples[event.ownerId]) {
+        couples[event.ownerId] = {
+          ...couples[event.ownerId],
+          lifeEventIds: couples[event.ownerId].lifeEventIds.filter((x) => x !== id),
+        };
+      }
+      return {
+        events,
+        people,
+        couples,
+        ...withLog(state, `Удалено событие: ${event.title}`),
+      };
+    }),
+  attachMediaToEvent: (eventId, mediaId, kind) =>
+    set((state) => {
+      const event = state.events[eventId];
+      if (!event) return {};
+      const key = kind === 'photo' ? 'photoIds' : kind === 'video' ? 'videoIds' : 'audioIds';
+      const existing = event[key] ?? [];
+      if (existing.includes(mediaId)) return {};
+      return {
+        events: {
+          ...state.events,
+          [eventId]: { ...event, [key]: [...existing, mediaId] },
+        },
+      };
+    }),
+  detachMediaFromEvent: (eventId, mediaId, kind) =>
+    set((state) => {
+      const event = state.events[eventId];
+      if (!event) return {};
+      const key = kind === 'photo' ? 'photoIds' : kind === 'video' ? 'videoIds' : 'audioIds';
+      const existing = event[key] ?? [];
+      return {
+        events: {
+          ...state.events,
+          [eventId]: { ...event, [key]: existing.filter((id) => id !== mediaId) },
+        },
       };
     }),
   addMediaItem: (media) =>

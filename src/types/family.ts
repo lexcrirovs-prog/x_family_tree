@@ -7,6 +7,7 @@ export type ThemeMode = 'dark' | 'light';
 export type Person = {
   id: string;
   firstName: string;
+  patronymic?: string;
   lastName: string;
   maidenName?: string;
   gender: Gender;
@@ -16,6 +17,7 @@ export type Person = {
   photoIds: string[];
   videoIds: string[];
   audioIds: string[];
+  primaryPhotoId?: string;
   parentCoupleId?: string;
   lifeEventIds: string[];
   isDeleted?: boolean;
@@ -77,15 +79,18 @@ export type MediaItem = {
 
 export type LifeEventType =
   | 'birth'
+  | 'school'
   | 'marriage'
   | 'childBirth'
   | 'death'
   | 'education'
   | 'work'
+  | 'retirement'
   | 'move'
   | 'achievement'
   | 'meeting'
   | 'travel'
+  | 'memorable'
   | 'custom';
 
 export type LifeEvent = {
@@ -99,6 +104,7 @@ export type LifeEvent = {
   description?: string;
   photoIds: string[];
   videoIds: string[];
+  audioIds: string[];
   linkedEntities: Array<{
     type: EntityLinkType;
     id: string;

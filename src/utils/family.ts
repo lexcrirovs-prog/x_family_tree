@@ -1,8 +1,10 @@
 import type { Couple, FamilySnapshot, ImportantPerson, LifeEvent, Person } from '../types/family';
 
-export function getFullName(person?: Pick<Person | ImportantPerson, 'firstName' | 'lastName'>): string {
+export function getFullName(
+  person?: Pick<Person | ImportantPerson, 'firstName' | 'lastName'> & { patronymic?: string },
+): string {
   if (!person) return 'Неизвестно';
-  return [person.firstName, person.lastName].filter(Boolean).join(' ');
+  return [person.firstName, person.patronymic, person.lastName].filter(Boolean).join(' ');
 }
 
 export function getInitials(person?: Pick<Person | ImportantPerson, 'firstName' | 'lastName'>): string {
@@ -102,15 +104,18 @@ export function generationLabel(generation: number): string {
 export function eventIcon(type: LifeEvent['type']): string {
   const icons: Record<LifeEvent['type'], string> = {
     birth: '●',
+    school: '✎',
     marriage: '◇',
     childBirth: '+',
     death: '×',
     education: '∴',
     work: '▦',
+    retirement: '☕',
     move: '↗',
     achievement: '★',
     meeting: '↔',
     travel: '⌁',
+    memorable: '❖',
     custom: '•',
   };
   return icons[type];

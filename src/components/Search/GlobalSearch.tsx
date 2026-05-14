@@ -15,7 +15,7 @@ export function GlobalSearch() {
   const fuse = useMemo(
     () =>
       new Fuse(Object.values(people).filter((person) => !person.isDeleted), {
-        keys: ['firstName', 'lastName', 'maidenName', 'bio'],
+        keys: ['firstName', 'patronymic', 'lastName', 'maidenName', 'bio'],
         threshold: 0.35,
       }),
     [people],

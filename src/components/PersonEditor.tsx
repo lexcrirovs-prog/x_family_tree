@@ -115,8 +115,19 @@ export function PersonEditor() {
 
       <div className="form-grid">
         <TextField label="Имя" value={person.firstName} onChange={(firstName) => patch({ firstName })} />
+        <TextField
+          label="Отчество"
+          value={person.patronymic}
+          onChange={(patronymic) => patch({ patronymic: patronymic || undefined })}
+        />
         <TextField label="Фамилия" value={person.lastName} onChange={(lastName) => patch({ lastName })} />
-        <TextField label="Девичья фамилия" value={person.maidenName} onChange={(maidenName) => patch({ maidenName })} />
+        {person.gender === 'female' && (
+          <TextField
+            label="Девичья фамилия"
+            value={person.maidenName}
+            onChange={(maidenName) => patch({ maidenName: maidenName || undefined })}
+          />
+        )}
         <label>
           <span>Пол</span>
           <select value={person.gender} onChange={(event) => patch({ gender: event.target.value as Gender })}>

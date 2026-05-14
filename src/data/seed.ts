@@ -267,6 +267,7 @@ const events: Record<string, LifeEvent> = {
     description: 'Начало центральной ветви дерева.',
     photoIds: [],
     videoIds: [],
+    audioIds: [],
     linkedEntities: [{ type: 'person', id: 'mother', role: 'mother' }],
   },
   'event-me-move': {
@@ -280,6 +281,7 @@ const events: Record<string, LifeEvent> = {
     description: 'Появилась идея собрать цифровой семейный архив.',
     photoIds: [],
     videoIds: [],
+    audioIds: [],
     linkedEntities: [{ type: 'importantPerson', id: 'mentor', role: 'advisor' }],
   },
   'event-brother-birth': {
@@ -291,6 +293,7 @@ const events: Record<string, LifeEvent> = {
     date: '1994',
     photoIds: [],
     videoIds: [],
+    audioIds: [],
     linkedEntities: [],
   },
   'event-wedding': {
@@ -303,6 +306,7 @@ const events: Record<string, LifeEvent> = {
     location: 'Саратов',
     photoIds: [],
     videoIds: [],
+    audioIds: [],
     linkedEntities: [
       { type: 'person', id: 'me', role: 'spouse' },
       { type: 'person', id: 'spouse', role: 'spouse' },
@@ -318,6 +322,7 @@ const events: Record<string, LifeEvent> = {
     location: 'Энгельс',
     photoIds: [],
     videoIds: [],
+    audioIds: [],
     linkedEntities: [],
   },
 };

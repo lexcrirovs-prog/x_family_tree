@@ -1,5 +1,5 @@
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { ArrowLeft, FileDown, Pencil, Plus, TreePine } from 'lucide-react';
+import { ArrowLeft, FileDown, Images, Pencil, Plus, Star, TreePine } from 'lucide-react';
 import { useFamilyStore } from '../../store/familyStore';
 import { getEventsForPerson, getFullName, getYears } from '../../utils/family';
 import { Breadcrumbs } from '../layout/Breadcrumbs';
@@ -17,6 +17,7 @@ export function PersonProfile() {
   const selectPerson = useFamilyStore((state) => state.selectPerson);
   const setFocusedPerson = useFamilyStore((state) => state.setFocusedPerson);
   const addLifeEvent = useFamilyStore((state) => state.addLifeEvent);
+  const updatePerson = useFamilyStore((state) => state.updatePerson);
   const person = id ? snapshot.people[id] : undefined;
 
   if (!person) {
@@ -43,10 +44,19 @@ export function PersonProfile() {
         <div className="profile-avatar">{person.firstName[0]}{person.lastName[0]}</div>
         <div>
           <h1>{getFullName(person)}</h1>
-          <p>{person.maidenName ? `урожд. ${person.maidenName} · ` : ''}{getYears(person)}</p>
+          <p>
+            {person.gender === 'female' && person.maidenName
+              ? `урожд. ${person.maidenName} · `
+              : ''}
+            {getYears(person)}
+          </p>
           {person.bio && <span>{person.bio}</span>}
         </div>
         <div className="profile-actions">
+          <button type="button" onClick={() => navigate(`/person/${person.id}/gallery`)}>
+            <Images size={16} />
+            Галерея по вехам
+          </button>
           <button type="button" onClick={() => { selectPerson(person.id); navigate('/'); }}>
             <Pencil size={16} />
             Редактировать
@@ -94,7 +104,33 @@ export function PersonProfile() {
             {photoItems.length === 0 ? (
               <div className="empty-state">Фотографии пока не добавлены.</div>
             ) : (
-              photoItems.map((media) => <PhotoTagger key={media.id} media={media} />)
+              photoItems.map((media) => (
+                <div key={media.id} className="photo-with-primary">
+                  <PhotoTagger media={media} />
+                  <button
+                    type="button"
+                    className={
+                      person.primaryPhotoId === media.id
+                        ? 'set-primary-btn set-primary-btn-active'
+                        : 'set-primary-btn'
+                    }
+                    onClick={() =>
+                      updatePerson(person.id, {
+                        primaryPhotoId:
+                          person.primaryPhotoId === media.id ? undefined : media.id,
+                      })
+                    }
+                    title={
+                      person.primaryPhotoId === media.id
+                        ? 'Это главное фото'
+                        : 'Сделать главным фото'
+                    }
+                  >
+                    <Star size={14} />
+                    {person.primaryPhotoId === media.id ? 'Главное фото' : 'Сделать главным'}
+                  </button>
+                </div>
+              ))
             )}
           </div>
 
