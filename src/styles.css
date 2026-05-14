@@ -309,7 +309,8 @@ label {
 }
 
 .react-flow__edge.edge-spouse path {
-  stroke: rgba(255, 186, 102, 0.78);
+  stroke: rgba(255, 143, 193, 0.85);
+  stroke-dasharray: 4 4;
 }
 
 .react-flow__edge.edge-important path {
@@ -2746,10 +2747,58 @@ select option {
 /* Smooth node positioning — animates on drop and on auto-layout reflows.
    Disabled while actively dragging to avoid input lag. */
 .graph-surface .react-flow__node {
-  transition: transform 220ms cubic-bezier(0.22, 1, 0.36, 1);
+  transition: transform 260ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 .graph-surface.is-dragging .react-flow__node {
   transition: none;
+}
+
+/* ===== Left-side time axis ===== */
+.graph-surface {
+  position: relative;
+}
+
+.timeline-axis {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 64px;
+  pointer-events: none;
+  z-index: 6;
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--canvas) 92%, transparent) 50%,
+    transparent
+  );
+  border-right: 1px solid var(--soft-border);
+  overflow: hidden;
+}
+
+.timeline-axis-tick {
+  position: absolute;
+  left: 0;
+  width: 64px;
+  height: 18px;
+  margin-top: -9px;
+  display: flex;
+  align-items: center;
+  font-size: 11px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+  border-top: 1px solid color-mix(in srgb, var(--soft-border) 60%, transparent);
+  will-change: transform;
+}
+
+.timeline-axis-tick span {
+  display: block;
+  padding-left: 8px;
+}
+
+/* Push the ReactFlow viewport so the axis doesn't cover the first column.
+   The mini-map already sits in the bottom-right so it's safe. */
+.graph-surface .react-flow__renderer {
+  padding-left: 0;
 }
 
 /* Mobile: collapse history rail so trash returns to the bottom-left */

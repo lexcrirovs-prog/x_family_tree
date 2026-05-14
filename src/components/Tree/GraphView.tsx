@@ -7,6 +7,7 @@ import ReactFlow, {
   MiniMap,
   ReactFlowProvider,
   useReactFlow,
+  useStore as useReactFlowStore,
   type Edge,
   type Node,
   type NodeMouseHandler,
@@ -22,8 +23,36 @@ import {
   personMatchesSurname,
 } from '../../utils/family';
 import { usePanInertia } from '../../hooks/usePanInertia';
+import {
+  TIMELINE_END,
+  TIMELINE_START,
+  effectiveYear,
+  yearToY,
+} from '../../utils/timeline';
 import { PersonNode, type PersonNodeData } from './PersonNode';
 import { ImportantNode, type ImportantNodeData } from './ImportantNode';
+
+function TimelineAxis() {
+  const transform = useReactFlowStore((s) => s.transform);
+  const tx = transform[1];
+  const zoom = transform[2];
+  const years: number[] = [];
+  const step = zoom < 0.5 ? 20 : 10;
+  for (let y = TIMELINE_START; y <= TIMELINE_END; y += step) years.push(y);
+  return (
+    <div className="timeline-axis" aria-hidden>
+      {years.map((y) => (
+        <div
+          key={y}
+          className="timeline-axis-tick"
+          style={{ transform: `translateY(${yearToY(y) * zoom + tx}px)` }}
+        >
+          <span>{y}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
 
 const nodeTypes = {
   person: PersonNode,
@@ -80,16 +109,14 @@ function GraphViewInner() {
   );
 
   const nodes = useMemo(() => {
-    const generationGap = 210;
     const xGap = 270;
-    const top = 80;
     const snapshot = { people, couples, importantPeople, events, media };
     const peopleList = activePeople(snapshot);
     const importantsList = activeImportantPeople(snapshot);
     const generations = [...new Set(peopleList.map((p) => p.generation))].sort((a, b) => a - b);
     const list: Node<PersonNodeData | ImportantNodeData>[] = [];
 
-    generations.forEach((generation, generationIndex) => {
+    generations.forEach((generation) => {
       const inGeneration = peopleList
         .filter((p) => p.generation === generation)
         .sort((a, b) => {
@@ -101,10 +128,11 @@ function GraphViewInner() {
         const matches = surnameFilter ? personMatchesSurname(person, surnameFilter) : true;
         const verdict = filterFn(matches);
         if (verdict === 'hide') return;
-        const auto = {
-          x: startX + index * xGap + 720,
-          y: top + generationIndex * generationGap,
-        };
+        // Y is locked to the vertical timeline (year of birth) — only X is
+        // user-controllable. customPosition.y is ignored on render so cards
+        // always sit on their year row even after a free drag.
+        const year = effectiveYear(person, people);
+        const autoX = startX + index * xGap + 720;
         list.push({
           id: person.id,
           type: 'person',
@@ -113,7 +141,10 @@ function GraphViewInner() {
             focused: focusedPersonId === person.id,
             filterMuted: verdict === 'mute',
           },
-          position: person.customPosition ?? auto,
+          position: {
+            x: person.customPosition?.x ?? autoX,
+            y: yearToY(year),
+          },
         });
       });
     });
@@ -129,14 +160,20 @@ function GraphViewInner() {
           : true;
         const verdict = filterFn(matches);
         if (verdict === 'hide') return;
-        const y = linkedPerson
-          ? top + generations.indexOf(linkedPerson.generation) * generationGap + 42
-          : top + 120;
+        // Position important person near the linked person's year, slightly
+        // offset so the diamond doesn't overlap.
+        const refYear = linkedPerson
+          ? effectiveYear(linkedPerson, people)
+          : new Date().getFullYear();
+        const y = yearToY(refYear) + 60;
         list.push({
           id: important.id,
           type: 'important',
           data: { importantId: important.id, filterMuted: verdict === 'mute' },
-          position: important.customPosition ?? { x: 260 + index * 190, y },
+          position: {
+            x: important.customPosition?.x ?? 260 + index * 190,
+            y,
+          },
         });
       });
     }
@@ -294,6 +331,7 @@ function GraphViewInner() {
         <MiniMap pannable zoomable className="mini-map" />
         <Controls className="flow-controls" />
       </ReactFlow>
+      <TimelineAxis />
       {menu && (
         <div
           className="ctx-menu"
