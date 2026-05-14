@@ -1,11 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Trash2 } from 'lucide-react';
+import { indexedDBMediaAdapter } from '../../storage/IndexedDBAdapter';
 import { useFamilyStore } from '../../store/familyStore';
-import {
-  deleteEntity,
-  deleteMediaBlob,
-  getMediaUrl,
-} from '../../storage/SupabaseAdapter';
 import type { MediaItem } from '../../types/family';
 
 type Props = { ownerId: string };
@@ -20,11 +16,9 @@ function formatDuration(sec?: number): string {
 export function AudioStories({ ownerId }: Props) {
   const person = useFamilyStore((s) => s.people[ownerId]);
   const mediaMap = useFamilyStore((s) => s.media);
-  const userRole = useFamilyStore((s) => s.userRole);
   const updateMediaItem = useFamilyStore((s) => s.updateMediaItem);
   const removeMediaItem = useFamilyStore((s) => s.removeMediaItem);
   const detach = useFamilyStore((s) => s.detachMediaFromPerson);
-  const canEdit = userRole === 'owner' || userRole === 'editor';
 
   const items = (person?.audioIds ?? [])
     .map((id) => mediaMap[id])
@@ -44,13 +38,11 @@ export function AudioStories({ ownerId }: Props) {
         <AudioCard
           key={item.id}
           item={item}
-          canEdit={canEdit}
           onCaption={(caption) => updateMediaItem(item.id, { caption })}
           onDelete={async () => {
             if (!confirm('Удалить аудиозапись безвозвратно?')) return;
             try {
-              if (item.storagePath) await deleteMediaBlob(item.storagePath);
-              await deleteEntity('media', item.id);
+              await indexedDBMediaAdapter.deleteBlob(item.id);
             } catch (err) {
               console.error(err);
             }
@@ -65,12 +57,10 @@ export function AudioStories({ ownerId }: Props) {
 
 function AudioCard({
   item,
-  canEdit,
   onCaption,
   onDelete,
 }: {
   item: MediaItem;
-  canEdit: boolean;
   onCaption: (caption: string) => void;
   onDelete: () => void;
 }) {
@@ -78,16 +68,16 @@ function AudioCard({
   const [caption, setCaption] = useState(item.caption ?? '');
 
   useEffect(() => {
-    let cancelled = false;
-    if (item.storagePath) {
-      getMediaUrl(item.storagePath).then((signed) => {
-        if (!cancelled) setUrl(signed);
-      });
-    }
+    let objectUrl: string | undefined;
+    indexedDBMediaAdapter.getBlob(item.id).then((stored) => {
+      if (!stored) return;
+      objectUrl = URL.createObjectURL(stored.blob);
+      setUrl(objectUrl);
+    });
     return () => {
-      cancelled = true;
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
     };
-  }, [item.storagePath]);
+  }, [item.id]);
 
   return (
     <div className="audio-card">
@@ -95,22 +85,19 @@ function AudioCard({
         <input
           className="audio-caption"
           value={caption}
-          disabled={!canEdit}
           onChange={(e) => setCaption(e.target.value)}
           onBlur={() => caption !== item.caption && onCaption(caption)}
           placeholder="Название записи"
         />
         <span className="audio-duration">{formatDuration(item.durationSec)}</span>
-        {canEdit && (
-          <button type="button" className="danger-action" onClick={onDelete} title="Удалить">
-            <Trash2 size={14} />
-          </button>
-        )}
+        <button type="button" className="danger-action" onClick={onDelete} title="Удалить">
+          <Trash2 size={14} />
+        </button>
       </div>
       {url ? (
         <audio controls src={url} preload="metadata" />
       ) : (
-        <span className="muted-copy">Загрузка ссылки…</span>
+        <span className="muted-copy">Загрузка…</span>
       )}
     </div>
   );

@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { createJSONStorage, persist } from 'zustand/middleware';
 import { seedSnapshot } from '../data/seed';
 import type {
   ChangeLogEntry,
@@ -71,10 +72,13 @@ function withLog(state: FamilyStore, label: string): Pick<FamilyStore, 'changeLo
   return { changeLog: [logEntry(label), ...state.changeLog].slice(0, 20) };
 }
 
-export const useFamilyStore = create<FamilyStore>()((set, get) => ({
+export const useFamilyStore = create<FamilyStore>()(
+  persist(
+    (set, get) => ({
   ...seedSnapshot,
   treeId: undefined,
-  userRole: undefined,
+  // Default to 'owner' so the local (no-auth) mode shows edit UI everywhere.
+  userRole: 'owner' as TreeRole,
   mode: 'graph',
   theme: 'dark',
   selectedPersonId: 'me',
@@ -379,4 +383,24 @@ export const useFamilyStore = create<FamilyStore>()((set, get) => ({
       media: state.media,
     };
   },
-}));
+    }),
+    {
+      name: 'x-family-tree-metadata',
+      storage: createJSONStorage(() => localStorage),
+      partialize: (state) => ({
+        people: state.people,
+        couples: state.couples,
+        importantPeople: state.importantPeople,
+        events: state.events,
+        media: state.media,
+        mode: state.mode,
+        theme: state.theme,
+        selectedPersonId: state.selectedPersonId,
+        fanRootId: state.fanRootId,
+        showImportantPeople: state.showImportantPeople,
+        recentPersonIds: state.recentPersonIds,
+        changeLog: state.changeLog,
+      }),
+    },
+  ),
+);

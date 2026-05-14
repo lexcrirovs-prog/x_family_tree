@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Mic, Upload } from 'lucide-react';
+import { indexedDBMediaAdapter } from '../../storage/IndexedDBAdapter';
 import { useFamilyStore } from '../../store/familyStore';
-import { uploadMediaBlob } from '../../storage/SupabaseAdapter';
 import type { MediaItem } from '../../types/family';
 import { createId } from '../../utils/ids';
 
@@ -26,15 +26,9 @@ function readDuration(file: File): Promise<number | undefined> {
 }
 
 export function AudioUploader({ ownerId }: Props) {
-  const treeId = useFamilyStore((s) => s.treeId);
-  const userRole = useFamilyStore((s) => s.userRole);
   const addMediaItem = useFamilyStore((s) => s.addMediaItem);
   const attachMediaToPerson = useFamilyStore((s) => s.attachMediaToPerson);
   const [busy, setBusy] = useState(false);
-
-  const canEdit = userRole === 'owner' || userRole === 'editor';
-
-  if (!canEdit) return null;
 
   return (
     <label className="media-upload" aria-disabled={busy}>
@@ -43,15 +37,21 @@ export function AudioUploader({ ownerId }: Props) {
       <input
         type="file"
         accept="audio/*"
-        disabled={busy || !treeId}
+        disabled={busy}
         onChange={async (event) => {
           const file = event.target.files?.[0];
-          if (!file || !treeId) return;
+          if (!file) return;
           setBusy(true);
           try {
             const id = createId('audio');
-            const ext = (file.name.split('.').pop() || 'mp3').toLowerCase();
-            const path = await uploadMediaBlob(treeId, id, file, ext);
+            await indexedDBMediaAdapter.saveBlob({
+              id,
+              type: 'audio',
+              blob: file,
+              fileName: file.name,
+              mimeType: file.type,
+              createdAt: new Date().toISOString(),
+            });
             const duration = await readDuration(file);
             const media: MediaItem = {
               id,
@@ -59,7 +59,6 @@ export function AudioUploader({ ownerId }: Props) {
               caption: file.name.replace(/\.[^.]+$/, ''),
               tags: [],
               ownerId,
-              storagePath: path,
               durationSec: duration,
             };
             addMediaItem(media);

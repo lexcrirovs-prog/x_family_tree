@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Tag } from 'lucide-react';
-import { getMediaUrl } from '../../storage/SupabaseAdapter';
+import { indexedDBMediaAdapter } from '../../storage/IndexedDBAdapter';
 import { useFamilyStore } from '../../store/familyStore';
 import type { MediaItem, PhotoTag } from '../../types/family';
 import { getFullName } from '../../utils/family';
@@ -14,23 +14,21 @@ type PhotoTaggerProps = {
 export function PhotoTagger({ media }: PhotoTaggerProps) {
   const people = useFamilyStore((state) => state.people);
   const updateMediaItem = useFamilyStore((state) => state.updateMediaItem);
-  const userRole = useFamilyStore((state) => state.userRole);
   const [url, setUrl] = useState<string | undefined>();
   const [tagMode, setTagMode] = useState(false);
   const [draft, setDraft] = useState<PhotoTag | undefined>();
-  const canEdit = userRole === 'owner' || userRole === 'editor';
 
   useEffect(() => {
-    let cancelled = false;
-    if (media.storagePath) {
-      getMediaUrl(media.storagePath).then((signed) => {
-        if (!cancelled) setUrl(signed);
-      });
-    }
+    let objectUrl: string | undefined;
+    indexedDBMediaAdapter.getBlob(media.id).then((stored) => {
+      if (!stored) return;
+      objectUrl = URL.createObjectURL(stored.blob);
+      setUrl(objectUrl);
+    });
     return () => {
-      cancelled = true;
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
     };
-  }, [media.storagePath]);
+  }, [media.id]);
 
   if (!url) {
     return (
@@ -45,16 +43,14 @@ export function PhotoTagger({ media }: PhotoTaggerProps) {
     <div className="photo-tagger">
       <div className="photo-tagger-toolbar">
         <strong>{media.caption || 'Фото'}</strong>
-        {canEdit && (
-          <button type="button" onClick={() => setTagMode((value) => !value)}>
-            {tagMode ? 'Просмотр' : 'Режим тегирования'}
-          </button>
-        )}
+        <button type="button" onClick={() => setTagMode((value) => !value)}>
+          {tagMode ? 'Просмотр' : 'Режим тегирования'}
+        </button>
       </div>
       <div
-        className={tagMode && canEdit ? 'photo-canvas tagging' : 'photo-canvas'}
+        className={tagMode ? 'photo-canvas tagging' : 'photo-canvas'}
         onClick={(event) => {
-          if (!tagMode || !canEdit) return;
+          if (!tagMode) return;
           const rect = event.currentTarget.getBoundingClientRect();
           const x = ((event.clientX - rect.left) / rect.width) * 100;
           const y = ((event.clientY - rect.top) / rect.height) * 100;
@@ -90,7 +86,7 @@ export function PhotoTagger({ media }: PhotoTaggerProps) {
           })}
         </div>
       </div>
-      {draft && canEdit && (
+      {draft && (
         <div className="tag-editor">
           <select
             value={draft.linkedPersonId ?? ''}
