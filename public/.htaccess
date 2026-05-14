@@ -1,0 +1,30 @@
+# SPA fallback for React Router served under /family/
+<IfModule mod_rewrite.c>
+  RewriteEngine On
+  RewriteBase /family/
+
+  # Don't rewrite real files / directories
+  RewriteCond %{REQUEST_FILENAME} -f [OR]
+  RewriteCond %{REQUEST_FILENAME} -d
+  RewriteRule ^ - [L]
+
+  # Everything else goes to index.html
+  RewriteRule ^ /family/index.html [L]
+</IfModule>
+
+# Decent caching for hashed assets
+<IfModule mod_expires.c>
+  ExpiresActive On
+  ExpiresByType text/css "access plus 1 year"
+  ExpiresByType application/javascript "access plus 1 year"
+  ExpiresByType image/svg+xml "access plus 1 month"
+  ExpiresByType image/png "access plus 1 month"
+  ExpiresByType image/jpeg "access plus 1 month"
+</IfModule>
+
+# index.html should never be cached
+<IfModule mod_headers.c>
+  <FilesMatch "index\.html$">
+    Header set Cache-Control "no-cache, no-store, must-revalidate"
+  </FilesMatch>
+</IfModule>
