@@ -15,8 +15,10 @@ export function LifeTimeline({ events, snapshot }: LifeTimelineProps) {
   return (
     <div className="life-timeline">
       {events.map((event) => (
-        <article key={event.id} className="event-card">
-          <div className="event-icon">{eventIcon(event.type)}</div>
+        <article key={event.id} className={`event-card event-card-${event.type}`}>
+          <div className="event-icon">
+            {event.type === 'childBirth' ? '👶' : eventIcon(event.type)}
+          </div>
           <div>
             <header>
               <strong>{event.title}</strong>

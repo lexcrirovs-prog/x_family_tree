@@ -1,8 +1,10 @@
 import type { Couple, FamilySnapshot, ImportantPerson, LifeEvent, Person } from '../types/family';
 
-export function getFullName(person?: Pick<Person | ImportantPerson, 'firstName' | 'lastName'>): string {
+export function getFullName(
+  person?: Pick<Person | ImportantPerson, 'firstName' | 'lastName'> & { patronymic?: string },
+): string {
   if (!person) return 'Неизвестно';
-  return [person.firstName, person.lastName].filter(Boolean).join(' ');
+  return [person.firstName, person.patronymic, person.lastName].filter(Boolean).join(' ');
 }
 
 export function getInitials(person?: Pick<Person | ImportantPerson, 'firstName' | 'lastName'>): string {
@@ -23,6 +25,45 @@ export function getAge(person: Person, nowYear = new Date().getFullYear()): numb
 export function activePeople(snapshot: FamilySnapshot): Person[] {
   return Object.values(snapshot.people).filter((person) => !person.isDeleted);
 }
+
+export function activeImportantPeople(snapshot: FamilySnapshot): ImportantPerson[] {
+  return Object.values(snapshot.importantPeople).filter((p) => !p.isDeleted);
+}
+
+export function uniqueSurnames(snapshot: FamilySnapshot): string[] {
+  const set = new Set<string>();
+  for (const person of Object.values(snapshot.people)) {
+    if (person.isDeleted) continue;
+    if (person.lastName) set.add(person.lastName);
+    if (person.maidenName) set.add(person.maidenName);
+  }
+  return Array.from(set).sort((a, b) => a.localeCompare(b));
+}
+
+export function personMatchesSurname(person: Person, surname: string): boolean {
+  return person.lastName === surname || person.maidenName === surname;
+}
+
+/**
+ * True only when the person's parentCoupleId points to an existing couple.
+ * Guards against dangling references (e.g. data imported from seed where the
+ * couple was never created), so we still show "+ Родители" in the UI.
+ */
+export function hasResolvedParents(snapshot: FamilySnapshot, personId: string): boolean {
+  const person = snapshot.people[personId];
+  if (!person?.parentCoupleId) return false;
+  return Boolean(snapshot.couples[person.parentCoupleId]);
+}
+
+export const IMPORTANT_RELATIONS: ReadonlyArray<{ key: string; label: string; icon: string }> = [
+  { key: 'отчим', label: 'Отчим', icon: '👨' },
+  { key: 'мачеха', label: 'Мачеха', icon: '👩' },
+  { key: 'крёстный', label: 'Крёстный', icon: '✝' },
+  { key: 'крёстная', label: 'Крёстная', icon: '✝' },
+  { key: 'наставник', label: 'Наставник', icon: '🎓' },
+  { key: 'друг семьи', label: 'Друг семьи', icon: '🤝' },
+  { key: 'няня', label: 'Няня', icon: '🍼' },
+];
 
 export function findCoupleByPartners(couples: Record<string, Couple>, a: string, b: string): Couple | undefined {
   return Object.values(couples).find(
@@ -102,15 +143,19 @@ export function generationLabel(generation: number): string {
 export function eventIcon(type: LifeEvent['type']): string {
   const icons: Record<LifeEvent['type'], string> = {
     birth: '●',
+    school: '✎',
     marriage: '◇',
     childBirth: '+',
     death: '×',
     education: '∴',
     work: '▦',
+    military: '⚔',
+    retirement: '☕',
     move: '↗',
     achievement: '★',
     meeting: '↔',
     travel: '⌁',
+    memorable: '❖',
     custom: '•',
   };
   return icons[type];

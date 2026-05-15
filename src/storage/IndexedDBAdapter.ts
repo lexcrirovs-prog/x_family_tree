@@ -1,5 +1,14 @@
 import Dexie, { type Table } from 'dexie';
-import type { MediaStorageAdapter, StoredMediaBlob } from './StorageAdapter';
+import type { MediaItem } from '../types/family';
+
+export type StoredMediaBlob = {
+  id: string;
+  type: MediaItem['type'];
+  blob: Blob;
+  fileName?: string;
+  mimeType?: string;
+  createdAt: string;
+};
 
 class FamilyMediaDatabase extends Dexie {
   media!: Table<StoredMediaBlob, string>;
@@ -14,19 +23,14 @@ class FamilyMediaDatabase extends Dexie {
 
 const db = new FamilyMediaDatabase();
 
-export class IndexedDBMediaAdapter implements MediaStorageAdapter {
+export const indexedDBMediaAdapter = {
   async saveBlob(media: StoredMediaBlob): Promise<void> {
     await db.media.put(media);
-  }
-
+  },
   async getBlob(id: string): Promise<StoredMediaBlob | undefined> {
     return db.media.get(id);
-  }
-
+  },
   async deleteBlob(id: string): Promise<void> {
     await db.media.delete(id);
-  }
-}
-
-export const indexedDBMediaAdapter = new IndexedDBMediaAdapter();
-
+  },
+};

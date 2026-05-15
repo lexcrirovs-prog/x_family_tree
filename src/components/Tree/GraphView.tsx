@@ -1,106 +1,231 @@
-import { useMemo, useState } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import ReactFlow, {
   Background,
   Controls,
   MarkerType,
   MiniMap,
+  ReactFlowProvider,
+  useReactFlow,
+  useStore as useReactFlowStore,
   type Edge,
   type Node,
   type NodeMouseHandler,
+  type ReactFlowInstance,
 } from 'reactflow';
-import { AnimatePresence, motion } from 'framer-motion';
 import { useFamilyStore } from '../../store/familyStore';
-import { activePeople, getFullName } from '../../utils/family';
+import { useTreeHoverStore } from '../../store/treeHoverStore';
+import {
+  activeImportantPeople,
+  activePeople,
+  getFullName,
+  hasResolvedParents,
+  personMatchesSurname,
+} from '../../utils/family';
+import { usePanInertia } from '../../hooks/usePanInertia';
+import {
+  TIMELINE_END,
+  TIMELINE_START,
+  effectiveYear,
+  yearToY,
+} from '../../utils/timeline';
 import { PersonNode, type PersonNodeData } from './PersonNode';
 import { ImportantNode, type ImportantNodeData } from './ImportantNode';
+
+function TimelineAxis() {
+  const transform = useReactFlowStore((s) => s.transform);
+  const tx = transform[1];
+  const zoom = transform[2];
+  const years: number[] = [];
+  const step = zoom < 0.5 ? 20 : 10;
+  for (let y = TIMELINE_START; y <= TIMELINE_END; y += step) years.push(y);
+  return (
+    <div className="timeline-axis" aria-hidden>
+      {years.map((y) => (
+        <div
+          key={y}
+          className="timeline-axis-tick"
+          style={{ transform: `translateY(${yearToY(y) * zoom + tx}px)` }}
+        >
+          <span>{y}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
 
 const nodeTypes = {
   person: PersonNode,
   important: ImportantNode,
 };
 
-export function GraphView() {
-  const snapshot = useFamilyStore((state) => state.snapshot());
+type ContextMenuState = {
+  x: number;
+  y: number;
+  nodeId: string;
+  kind: 'person' | 'important';
+};
+
+function GraphViewInner() {
+  const people = useFamilyStore((state) => state.people);
+  const couples = useFamilyStore((state) => state.couples);
+  const importantPeople = useFamilyStore((state) => state.importantPeople);
+  const events = useFamilyStore((state) => state.events);
+  const media = useFamilyStore((state) => state.media);
   const showImportantPeople = useFamilyStore((state) => state.showImportantPeople);
   const focusedPersonId = useFamilyStore((state) => state.focusedPersonId);
   const setFocusedPerson = useFamilyStore((state) => state.setFocusedPerson);
   const selectPerson = useFamilyStore((state) => state.selectPerson);
+  const setPersonPosition = useFamilyStore((state) => state.setPersonPosition);
+  const setImportantPosition = useFamilyStore((state) => state.setImportantPosition);
+  const surnameFilter = useFamilyStore((state) => state.surnameFilter);
+  const surnameFilterMode = useFamilyStore((state) => state.surnameFilterMode);
+  const kinshipMode = useFamilyStore((state) => state.kinshipMode);
+  const setKinshipAnchor = useFamilyStore((state) => state.setKinshipAnchor);
+  const addParents = useFamilyStore((state) => state.addParents);
+  const addSpouse = useFamilyStore((state) => state.addSpouse);
+  const softDeletePerson = useFamilyStore((state) => state.softDeletePerson);
+  const softDeleteImportant = useFamilyStore((state) => state.softDeleteImportantPerson);
+
   const navigate = useNavigate();
-  const [hoveredNode, setHoveredNode] = useState<string | undefined>();
+  const setHover = useTreeHoverStore((s) => s.setHover);
+  const hoveredId = useTreeHoverStore((s) => s.hoveredId);
+  const relatedIds = useTreeHoverStore((s) => s.relatedIds);
+  const rfRef = useRef<ReactFlowInstance | undefined>(undefined);
+  const reactFlowApi = useReactFlow();
+  rfRef.current = reactFlowApi;
+  const inertia = usePanInertia(() => rfRef.current);
+  const [menu, setMenu] = useState<ContextMenuState | undefined>();
+  const [isDragging, setIsDragging] = useState(false);
 
-  const relatedIds = useMemo(() => {
-    if (!hoveredNode) return new Set<string>();
-    const related = new Set<string>([hoveredNode]);
-    Object.values(snapshot.couples).forEach((couple) => {
-      const family = [couple.partnerAId, couple.partnerBId, ...couple.childrenIds];
-      if (family.includes(hoveredNode)) family.forEach((id) => related.add(id));
-    });
-    Object.values(snapshot.importantPeople).forEach((important) => {
-      if (important.id === hoveredNode) {
-        important.linkedTo.forEach((link) => related.add(link.id));
-      }
-      if (important.linkedTo.some((link) => link.id === hoveredNode)) related.add(important.id);
-    });
-    return related;
-  }, [hoveredNode, snapshot.couples, snapshot.importantPeople]);
+  const surnameActive = Boolean(surnameFilter) && surnameFilterMode !== 'off';
+  const filterFn = useCallback(
+    (matches: boolean): 'hide' | 'mute' | 'show' => {
+      if (!surnameActive) return 'show';
+      if (matches) return 'show';
+      return surnameFilterMode === 'only' ? 'hide' : 'mute';
+    },
+    [surnameActive, surnameFilterMode],
+  );
 
-  const { nodes, edges } = useMemo(() => {
-    const generationGap = 210;
+  const nodes = useMemo(() => {
     const xGap = 270;
-    const top = 80;
-    const people = activePeople(snapshot);
-    const generations = [...new Set(people.map((person) => person.generation))].sort((a, b) => a - b);
-    const nodes: Node<PersonNodeData | ImportantNodeData>[] = [];
-    const edges: Edge[] = [];
+    const snapshot = { people, couples, importantPeople, events, media };
+    const peopleList = activePeople(snapshot);
+    const importantsList = activeImportantPeople(snapshot);
+    const generations = [...new Set(peopleList.map((p) => p.generation))].sort((a, b) => a - b);
+    const list: Node<PersonNodeData | ImportantNodeData>[] = [];
 
-    generations.forEach((generation, generationIndex) => {
-      const inGeneration = people
-        .filter((person) => person.generation === generation)
+    generations.forEach((generation) => {
+      const inGeneration = peopleList
+        .filter((p) => p.generation === generation)
         .sort((a, b) => {
           const branchOrder = String(a.branch).localeCompare(String(b.branch));
           return branchOrder || getFullName(a).localeCompare(getFullName(b));
         });
       const startX = 120 - ((inGeneration.length - 1) * xGap) / 2;
       inGeneration.forEach((person, index) => {
-        const muted = hoveredNode ? !relatedIds.has(person.id) : false;
-        nodes.push({
+        const matches = surnameFilter ? personMatchesSurname(person, surnameFilter) : true;
+        const verdict = filterFn(matches);
+        if (verdict === 'hide') return;
+        // Y is locked to the vertical timeline (year of birth) — only X is
+        // user-controllable. customPosition.y is ignored on render so cards
+        // always sit on their year row even after a free drag.
+        const year = effectiveYear(person, people);
+        const autoX = startX + index * xGap + 720;
+        list.push({
           id: person.id,
           type: 'person',
           data: {
             personId: person.id,
             focused: focusedPersonId === person.id,
-            muted,
+            filterMuted: verdict === 'mute',
           },
           position: {
-            x: startX + index * xGap + 720,
-            y: top + generationIndex * generationGap,
+            x: person.customPosition?.x ?? autoX,
+            y: yearToY(year),
           },
         });
       });
     });
 
-    Object.values(snapshot.couples).forEach((couple) => {
-      edges.push({
+    if (showImportantPeople) {
+      importantsList.forEach((important, index) => {
+        const firstLink = important.linkedTo[0];
+        const linkedPerson = firstLink?.type === 'person' ? people[firstLink.id] : undefined;
+        const matches = surnameFilter
+          ? linkedPerson
+            ? personMatchesSurname(linkedPerson, surnameFilter)
+            : false
+          : true;
+        const verdict = filterFn(matches);
+        if (verdict === 'hide') return;
+        // Position important person near the linked person's year, slightly
+        // offset so the diamond doesn't overlap.
+        const refYear = linkedPerson
+          ? effectiveYear(linkedPerson, people)
+          : new Date().getFullYear();
+        const y = yearToY(refYear) + 60;
+        list.push({
+          id: important.id,
+          type: 'important',
+          data: { importantId: important.id, filterMuted: verdict === 'mute' },
+          position: {
+            x: important.customPosition?.x ?? 260 + index * 190,
+            y,
+          },
+        });
+      });
+    }
+
+    return list;
+  }, [
+    couples,
+    events,
+    focusedPersonId,
+    filterFn,
+    importantPeople,
+    media,
+    people,
+    showImportantPeople,
+    surnameFilter,
+  ]);
+
+  const edges = useMemo(() => {
+    const list: Edge[] = [];
+    const isVisible = (id: string): boolean => nodes.some((n) => n.id === id);
+
+    Object.values(couples).forEach((couple) => {
+      if (surnameFilterMode === 'only') {
+        if (!isVisible(couple.partnerAId) || !isVisible(couple.partnerBId)) return;
+      }
+      list.push({
         id: `spouse-${couple.id}`,
         source: couple.partnerAId,
         target: couple.partnerBId,
         type: 'smoothstep',
-        animated: hoveredNode === couple.partnerAId || hoveredNode === couple.partnerBId,
-        className: hoveredNode && !relatedIds.has(couple.partnerAId) && !relatedIds.has(couple.partnerBId) ? 'edge-muted' : 'edge-spouse',
+        animated: hoveredId === couple.partnerAId || hoveredId === couple.partnerBId,
+        className:
+          hoveredId && !relatedIds.has(couple.partnerAId) && !relatedIds.has(couple.partnerBId)
+            ? 'edge-muted'
+            : 'edge-spouse',
         style: { strokeWidth: 1.8 },
       });
-
       couple.childrenIds.forEach((childId) => {
+        if (surnameFilterMode === 'only' && !isVisible(childId)) return;
         [couple.partnerAId, couple.partnerBId].forEach((parentId) => {
-          edges.push({
+          if (surnameFilterMode === 'only' && !isVisible(parentId)) return;
+          list.push({
             id: `parent-${parentId}-${childId}`,
             source: parentId,
             target: childId,
             type: 'smoothstep',
             markerEnd: { type: MarkerType.ArrowClosed, width: 12, height: 12 },
-            animated: hoveredNode === parentId || hoveredNode === childId,
-            className: hoveredNode && !relatedIds.has(parentId) && !relatedIds.has(childId) ? 'edge-muted' : 'edge-parent',
+            animated: hoveredId === parentId || hoveredId === childId,
+            className:
+              hoveredId && !relatedIds.has(parentId) && !relatedIds.has(childId)
+                ? 'edge-muted'
+                : 'edge-parent',
             style: { strokeWidth: 1.4 },
           });
         });
@@ -108,72 +233,203 @@ export function GraphView() {
     });
 
     if (showImportantPeople) {
-      Object.values(snapshot.importantPeople).forEach((important, index) => {
-        const firstLink = important.linkedTo[0];
-        const linkedPerson = firstLink?.type === 'person' ? snapshot.people[firstLink.id] : undefined;
-        const y = linkedPerson ? top + generations.indexOf(linkedPerson.generation) * generationGap + 42 : top + 120;
-        nodes.push({
-          id: important.id,
-          type: 'important',
-          data: {
-            importantId: important.id,
-            muted: hoveredNode ? !relatedIds.has(important.id) : false,
-          },
-          position: { x: 260 + index * 190, y },
-        });
+      Object.values(importantPeople).forEach((important) => {
+        if (important.isDeleted) return;
+        if (surnameFilterMode === 'only' && !isVisible(important.id)) return;
         important.linkedTo.forEach((link) => {
-          edges.push({
+          if (surnameFilterMode === 'only' && !isVisible(link.id)) return;
+          list.push({
             id: `important-${important.id}-${link.id}`,
             source: important.id,
             target: link.id,
             type: 'smoothstep',
-            className: hoveredNode && !relatedIds.has(important.id) && !relatedIds.has(link.id) ? 'edge-muted' : 'edge-important',
+            className:
+              hoveredId && !relatedIds.has(important.id) && !relatedIds.has(link.id)
+                ? 'edge-muted'
+                : 'edge-important',
             style: { strokeDasharray: '6 6', strokeWidth: 1.5 },
           });
         });
       });
     }
+    return list;
+  }, [couples, hoveredId, importantPeople, nodes, relatedIds, showImportantPeople, surnameFilterMode]);
 
-    return { nodes, edges };
-  }, [focusedPersonId, hoveredNode, relatedIds, showImportantPeople, snapshot]);
+  const handleEnter: NodeMouseHandler = (_, node) => {
+    setHover(node.id, { people, couples, importantPeople, events, media });
+  };
+  const handleLeave: NodeMouseHandler = () =>
+    setHover(undefined, { people, couples, importantPeople, events, media });
 
-  const handleEnter: NodeMouseHandler = (_, node) => setHoveredNode(node.id);
-  const handleLeave: NodeMouseHandler = () => setHoveredNode(undefined);
+  const handleClick: NodeMouseHandler = (_, node) => {
+    if (kinshipMode && people[node.id]) {
+      setKinshipAnchor(node.id);
+      return;
+    }
+    if (people[node.id]) selectPerson(node.id);
+  };
+
+  const handleContextMenu = (event: React.MouseEvent, node: Node) => {
+    event.preventDefault();
+    setMenu({
+      x: event.clientX,
+      y: event.clientY,
+      nodeId: node.id,
+      kind: people[node.id] ? 'person' : 'important',
+    });
+  };
+
+  const closeMenu = () => setMenu(undefined);
 
   return (
-    <AnimatePresence mode="wait">
-      <motion.div
-        key="graph"
-        className="tree-surface graph-surface"
-        initial={{ opacity: 0, y: 12 }}
-        animate={{ opacity: 1, y: 0 }}
-        exit={{ opacity: 0, y: -12 }}
+    <div
+      className={`tree-surface graph-surface${isDragging ? ' is-dragging' : ''}`}
+      onClick={(e) => {
+        if (menu) closeMenu();
+        // don't stop propagation — ReactFlow needs its own clicks
+        void e;
+      }}
+    >
+      <ReactFlow
+        nodes={nodes}
+        edges={edges}
+        nodeTypes={nodeTypes}
+        onInit={(instance) => {
+          rfRef.current = instance;
+        }}
+        onNodeClick={handleClick}
+        onNodeDoubleClick={(_, node) => {
+          if (people[node.id]) navigate(`/person/${node.id}`);
+        }}
+        onNodeMouseEnter={handleEnter}
+        onNodeMouseLeave={handleLeave}
+        onNodeContextMenu={handleContextMenu}
+        onNodeDragStart={() => setIsDragging(true)}
+        onNodeDragStop={(_, node) => {
+          setIsDragging(false);
+          if (people[node.id]) {
+            setPersonPosition(node.id, node.position.x, node.position.y);
+          } else if (importantPeople[node.id]) {
+            setImportantPosition(node.id, node.position.x, node.position.y);
+          }
+        }}
+        onMoveStart={inertia.onMoveStart}
+        onMove={inertia.onMove}
+        onMoveEnd={inertia.onMoveEnd}
+        onPaneClick={() => {
+          setFocusedPerson(undefined);
+          closeMenu();
+        }}
+        fitView
+        minZoom={0.25}
+        maxZoom={1.5}
+        nodesDraggable
+        panOnScrollSpeed={0.6}
+        proOptions={{ hideAttribution: true }}
       >
-        <ReactFlow
-          nodes={nodes}
-          edges={edges}
-          nodeTypes={nodeTypes}
-          onNodeClick={(_, node) => {
-            if (snapshot.people[node.id]) selectPerson(node.id);
-          }}
-          onNodeDoubleClick={(_, node) => {
-            if (snapshot.people[node.id]) navigate(`/person/${node.id}`);
-          }}
-          onNodeMouseEnter={handleEnter}
-          onNodeMouseLeave={handleLeave}
-          onPaneClick={() => setFocusedPerson(undefined)}
-          fitView
-          minZoom={0.25}
-          maxZoom={1.5}
-          nodesDraggable
-          proOptions={{ hideAttribution: true }}
+        <Background gap={28} size={1} color="rgba(255,255,255,.08)" />
+        <MiniMap pannable zoomable className="mini-map" />
+        <Controls className="flow-controls" />
+      </ReactFlow>
+      <TimelineAxis />
+      {menu && (
+        <div
+          className="ctx-menu"
+          style={{ left: menu.x, top: menu.y }}
+          role="menu"
+          onClick={(e) => e.stopPropagation()}
         >
-          <Background gap={28} size={1} color="rgba(255,255,255,.08)" />
-          <MiniMap pannable zoomable className="mini-map" />
-          <Controls className="flow-controls" />
-        </ReactFlow>
-      </motion.div>
-    </AnimatePresence>
+          {menu.kind === 'person' && people[menu.nodeId] ? (
+            <>
+              <button
+                type="button"
+                onClick={() => {
+                  selectPerson(menu.nodeId);
+                  navigate(`/person/${menu.nodeId}`);
+                  closeMenu();
+                }}
+              >
+                Открыть профиль
+              </button>
+              {!hasResolvedParents(
+                {
+                  people,
+                  couples,
+                  importantPeople,
+                  events,
+                  media,
+                },
+                menu.nodeId,
+              ) && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    addParents(menu.nodeId);
+                    closeMenu();
+                  }}
+                >
+                  + Добавить родителей
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={() => {
+                  addSpouse(menu.nodeId);
+                  closeMenu();
+                }}
+              >
+                + Добавить супруга/у
+              </button>
+              <button
+                type="button"
+                className="danger-action"
+                onClick={() => {
+                  if (
+                    confirm(
+                      `Удалить ${getFullName(people[menu.nodeId])}? Восстановить можно из корзины.`,
+                    )
+                  ) {
+                    softDeletePerson(menu.nodeId);
+                  }
+                  closeMenu();
+                }}
+              >
+                Удалить
+              </button>
+            </>
+          ) : (
+            <>
+              <button
+                type="button"
+                onClick={() => {
+                  navigate(`/important-person/${menu.nodeId}`);
+                  closeMenu();
+                }}
+              >
+                Открыть профиль
+              </button>
+              <button
+                type="button"
+                className="danger-action"
+                onClick={() => {
+                  softDeleteImportant(menu.nodeId);
+                  closeMenu();
+                }}
+              >
+                Удалить
+              </button>
+            </>
+          )}
+        </div>
+      )}
+    </div>
   );
 }
 
+export function GraphView() {
+  return (
+    <ReactFlowProvider>
+      <GraphViewInner />
+    </ReactFlowProvider>
+  );
+}

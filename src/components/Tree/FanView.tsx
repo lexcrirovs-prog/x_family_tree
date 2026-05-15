@@ -1,10 +1,9 @@
 import { useMemo } from 'react';
 import * as d3 from 'd3';
-import { AnimatePresence, motion } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 import { useFamilyStore } from '../../store/familyStore';
 import type { Person } from '../../types/family';
-import { getInitials, getYears } from '../../utils/family';
+import { getFullName, getInitials, getYears, personMatchesSurname } from '../../utils/family';
 
 type FanSlot = {
   person?: Person;
@@ -14,7 +13,11 @@ type FanSlot = {
   branch: 'paternal' | 'maternal' | 'self' | 'spouse';
 };
 
-function buildAncestorSlots(people: Record<string, Person>, couples: ReturnType<typeof useFamilyStore.getState>['couples'], rootId: string) {
+function buildAncestorSlots(
+  people: Record<string, Person>,
+  couples: ReturnType<typeof useFamilyStore.getState>['couples'],
+  rootId: string,
+) {
   const slots: FanSlot[] = [];
   const root = people[rootId];
   if (!root) return slots;
@@ -57,11 +60,21 @@ export function FanView() {
   const people = useFamilyStore((state) => state.people);
   const couples = useFamilyStore((state) => state.couples);
   const selectedPersonId = useFamilyStore((state) => state.selectedPersonId);
+  const fanRootId = useFamilyStore((state) => state.fanRootId);
   const selectPerson = useFamilyStore((state) => state.selectPerson);
+  const setFanRoot = useFamilyStore((state) => state.setFanRoot);
+  const surnameFilter = useFamilyStore((state) => state.surnameFilter);
+  const surnameFilterMode = useFamilyStore((state) => state.surnameFilterMode);
+  const surnameActive = Boolean(surnameFilter) && surnameFilterMode !== 'off';
   const navigate = useNavigate();
 
-  const slots = useMemo(() => buildAncestorSlots(people, couples, selectedPersonId), [couples, people, selectedPersonId]);
-  const root = people[selectedPersonId] ?? people.me;
+  const effectiveRootId = people[fanRootId] ? fanRootId : 'me';
+  const slots = useMemo(
+    () => buildAncestorSlots(people, couples, effectiveRootId),
+    [couples, people, effectiveRootId],
+  );
+  const root = people[effectiveRootId] ?? people.me;
+  const selectedPerson = people[selectedPersonId];
   const arc = d3.arc<d3.DefaultArcObject>();
 
   const sectorPath = (slot: FanSlot) => {
@@ -89,77 +102,124 @@ export function FanView() {
     };
   };
 
+  const canPromote = selectedPerson && selectedPerson.id !== effectiveRootId;
+
   return (
-    <AnimatePresence mode="wait">
-      <motion.div
-        key="fan"
-        className="tree-surface fan-surface"
-        initial={{ opacity: 0, y: 12 }}
-        animate={{ opacity: 1, y: 0 }}
-        exit={{ opacity: 0, y: -12 }}
-      >
-        <div className="fan-layout">
-          <svg viewBox="-420 -80 840 600" role="img" aria-label="Веер предков">
-            <defs>
-              <filter id="soft-glow">
-                <feGaussianBlur stdDeviation="3" result="coloredBlur" />
-                <feMerge>
-                  <feMergeNode in="coloredBlur" />
-                  <feMergeNode in="SourceGraphic" />
-                </feMerge>
-              </filter>
-            </defs>
-            <g className="fan-root" onClick={() => navigate(`/person/${root.id}`)}>
-              <circle r="58" cx="0" cy="92" />
-              <text x="0" y="88" textAnchor="middle" className="fan-root-initials">
-                {getInitials(root)}
-              </text>
-              <text x="0" y="112" textAnchor="middle">
-                {root.firstName}
-              </text>
-            </g>
-            {slots
-              .filter((slot) => slot.depth > 0)
-              .map((slot) => {
-                const position = textPosition(slot);
-                return (
-                  <g
-                    key={`${slot.depth}-${slot.index}-${slot.person?.id ?? 'empty'}`}
-                    className={`fan-sector fan-${slot.branch}`}
-                    onClick={() => {
-                      if (slot.person) selectPerson(slot.person.id);
-                    }}
-                    onDoubleClick={() => {
-                      if (slot.person) navigate(`/person/${slot.person.id}`);
-                    }}
-                  >
-                    <path d={sectorPath(slot)} transform="translate(0,92)" />
-                    {slot.person ? (
-                      <>
-                        <text x={position.x} y={position.y - 7} textAnchor="middle" className="fan-name">
-                          {slot.person.firstName}
-                        </text>
-                        <text x={position.x} y={position.y + 12} textAnchor="middle" className="fan-years">
-                          {getYears(slot.person)}
-                        </text>
-                      </>
-                    ) : (
-                      <text x={position.x} y={position.y} textAnchor="middle" className="fan-empty">
-                        Добавить
+    <div className="tree-surface fan-surface">
+      <div className="fan-layout">
+        <svg viewBox="-420 -80 840 600" role="img" aria-label="Веер предков">
+          <defs>
+            <filter id="soft-glow">
+              <feGaussianBlur stdDeviation="3" result="coloredBlur" />
+              <feMerge>
+                <feMergeNode in="coloredBlur" />
+                <feMergeNode in="SourceGraphic" />
+              </feMerge>
+            </filter>
+          </defs>
+          <g
+            className={
+              selectedPersonId === root.id ? 'fan-root fan-root-selected' : 'fan-root'
+            }
+            onClick={() => selectPerson(root.id)}
+            onDoubleClick={() => navigate(`/person/${root.id}`)}
+          >
+            <circle r="58" cx="0" cy="92" />
+            <text x="0" y="88" textAnchor="middle" className="fan-root-initials">
+              {getInitials(root)}
+            </text>
+            <text x="0" y="112" textAnchor="middle">
+              {root.firstName}
+            </text>
+          </g>
+          {slots
+            .filter((slot) => slot.depth > 0)
+            .map((slot) => {
+              const position = textPosition(slot);
+              const isSelected = slot.person?.id && slot.person.id === selectedPersonId;
+              const surnameMatches =
+                slot.person && surnameFilter
+                  ? personMatchesSurname(slot.person, surnameFilter)
+                  : true;
+              const filterMuted = surnameActive && !surnameMatches;
+              return (
+                <g
+                  key={`${slot.depth}-${slot.index}-${slot.person?.id ?? 'empty'}`}
+                  className={`fan-sector fan-${slot.branch}${isSelected ? ' fan-sector-selected' : ''}${filterMuted ? ' fan-sector-muted' : ''}`}
+                  onClick={() => {
+                    if (slot.person) selectPerson(slot.person.id);
+                  }}
+                  onDoubleClick={() => {
+                    if (slot.person) navigate(`/person/${slot.person.id}`);
+                  }}
+                >
+                  <path d={sectorPath(slot)} transform="translate(0,92)" />
+                  {slot.person ? (
+                    <>
+                      <text
+                        x={position.x}
+                        y={position.y - 7}
+                        textAnchor="middle"
+                        className="fan-name"
+                      >
+                        {slot.person.firstName}
                       </text>
-                    )}
-                  </g>
-                );
-              })}
-          </svg>
-          <aside className="fan-notes">
-            <strong>Веер</strong>
-            <span>Центр - выбранный профиль. Полукольца показывают предков до четырёх поколений.</span>
-            <p>Двойной клик по сектору открывает глубокий профиль, одиночный клик выбирает человека для редактора.</p>
-          </aside>
-        </div>
-      </motion.div>
-    </AnimatePresence>
+                      <text
+                        x={position.x}
+                        y={position.y + 12}
+                        textAnchor="middle"
+                        className="fan-years"
+                      >
+                        {getYears(slot.person)}
+                      </text>
+                    </>
+                  ) : (
+                    <text
+                      x={position.x}
+                      y={position.y}
+                      textAnchor="middle"
+                      className="fan-empty"
+                    >
+                      Добавить
+                    </text>
+                  )}
+                </g>
+              );
+            })}
+        </svg>
+        <aside className="fan-notes">
+          <strong>Веер</strong>
+          <span>
+            В центре — корень веера, полукольца показывают предков до четырёх поколений.
+            Одинарный клик подсвечивает человека, двойной — открывает профиль.
+          </span>
+          <p>
+            Корень веера: <strong>{getFullName(root)}</strong>
+          </p>
+          <p>
+            Выбран:{' '}
+            <strong>{selectedPerson ? getFullName(selectedPerson) : '—'}</strong>
+          </p>
+          <div className="fan-actions">
+            <button
+              type="button"
+              disabled={!canPromote}
+              onClick={() => selectedPerson && setFanRoot(selectedPerson.id)}
+              title="Сделать выбранного человека корнем веера"
+            >
+              Сделать корнем веера
+            </button>
+            <button
+              type="button"
+              disabled={effectiveRootId === 'me'}
+              onClick={() => setFanRoot('me')}
+              title="Вернуть стартовый корень"
+            >
+              Назад к стартовому
+            </button>
+          </div>
+        </aside>
+      </div>
+    </div>
   );
 }
-

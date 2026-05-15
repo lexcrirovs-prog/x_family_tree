@@ -7,17 +7,23 @@ export type ThemeMode = 'dark' | 'light';
 export type Person = {
   id: string;
   firstName: string;
+  patronymic?: string;
   lastName: string;
   maidenName?: string;
   gender: Gender;
   birthYear?: number;
+  birthDate?: string;
   deathYear?: number;
+  deathDate?: string;
   bio?: string;
   photoIds: string[];
   videoIds: string[];
+  audioIds: string[];
+  primaryPhotoId?: string;
   parentCoupleId?: string;
   lifeEventIds: string[];
   isDeleted?: boolean;
+  customPosition?: { x: number; y: number };
   generation: number;
   branch?: 'paternal' | 'maternal' | 'self' | 'spouse';
 };
@@ -43,6 +49,8 @@ export type ImportantPerson = {
   relationshipType: string;
   photoIds: string[];
   videoIds: string[];
+  isDeleted?: boolean;
+  customPosition?: { x: number; y: number };
   linkedTo: Array<{
     type: 'person' | 'couple';
     id: string;
@@ -63,26 +71,32 @@ export type PhotoTag = {
 
 export type MediaItem = {
   id: string;
-  type: 'photo' | 'video';
+  type: 'photo' | 'video' | 'audio';
   caption?: string;
   date?: string;
   yearTaken?: number;
   tags: PhotoTag[];
   linkedEventId?: string;
   ownerId?: string;
+  storagePath?: string;
+  durationSec?: number;
 };
 
 export type LifeEventType =
   | 'birth'
+  | 'school'
   | 'marriage'
   | 'childBirth'
   | 'death'
   | 'education'
   | 'work'
+  | 'military'
+  | 'retirement'
   | 'move'
   | 'achievement'
   | 'meeting'
   | 'travel'
+  | 'memorable'
   | 'custom';
 
 export type LifeEvent = {
@@ -94,8 +108,10 @@ export type LifeEvent = {
   date?: string;
   location?: string;
   description?: string;
+  link?: string;
   photoIds: string[];
   videoIds: string[];
+  audioIds: string[];
   linkedEntities: Array<{
     type: EntityLinkType;
     id: string;
